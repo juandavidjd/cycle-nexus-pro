@@ -2,89 +2,97 @@
 @tailwind components;
 @tailwind utilities;
 
-/* SRM Industrial Design System */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+/* SRM Industrial Design System - Somos Repuestos Motos */
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&family=Poppins:wght@400;500;600&family=Roboto:wght@300;400;500;700&display=swap');
 
 @layer base {
   :root {
-    /* SRM Core Colors */
-    --srm-blue: 220 100% 50%;
-    --srm-blue-dark: 220 100% 40%;
-    --srm-blue-glow: 220 100% 60%;
+    /* SRM Brand Colors (HSL format) */
+    --srm-red: 355 79% 56%;          /* Rojo Pasión #E63946 */
+    --srm-red-dark: 355 79% 46%;
+    --srm-red-glow: 355 79% 66%;
+    --srm-black: 0 0% 10%;            /* Negro Técnico #1A1A1A */
+    --srm-gray: 210 6% 49%;           /* Gris Neutro #6C757D */
+    --srm-blue: 199 100% 36%;         /* Azul Confiable #0077B6 */
+    --srm-blue-dark: 199 100% 26%;
+    --srm-blue-glow: 199 100% 46%;
+    --srm-white: 0 0% 100%;           /* Blanco Puro #FFFFFF */
     
     /* Industrial Neutrals */
-    --steel-900: 220 10% 8%;
-    --steel-800: 220 10% 12%;
-    --steel-700: 220 8% 18%;
-    --steel-600: 220 6% 28%;
-    --steel-500: 220 5% 40%;
-    --steel-400: 220 4% 55%;
-    --steel-300: 220 4% 70%;
-    --steel-200: 220 4% 85%;
-    --steel-100: 220 4% 94%;
-    --steel-50: 220 4% 98%;
+    --steel-900: 0 0% 10%;
+    --steel-800: 0 0% 13%;
+    --steel-700: 0 0% 18%;
+    --steel-600: 0 0% 25%;
+    --steel-500: 210 6% 49%;
+    --steel-400: 210 5% 60%;
+    --steel-300: 210 4% 75%;
+    --steel-200: 210 4% 88%;
+    --steel-100: 210 4% 95%;
+    --steel-50: 0 0% 98%;
 
     /* Semantic Tokens */
     --background: var(--steel-900);
-    --foreground: var(--steel-100);
+    --foreground: var(--srm-white);
 
     --card: var(--steel-800);
-    --card-foreground: var(--steel-100);
+    --card-foreground: var(--srm-white);
 
     --popover: var(--steel-800);
-    --popover-foreground: var(--steel-100);
+    --popover-foreground: var(--srm-white);
 
-    --primary: var(--srm-blue);
-    --primary-foreground: 0 0% 100%;
+    --primary: var(--srm-red);
+    --primary-foreground: var(--srm-white);
 
-    --secondary: var(--steel-700);
-    --secondary-foreground: var(--steel-100);
+    --secondary: var(--srm-blue);
+    --secondary-foreground: var(--srm-white);
 
     --muted: var(--steel-700);
     --muted-foreground: var(--steel-400);
 
-    --accent: var(--srm-blue-dark);
-    --accent-foreground: 0 0% 100%;
+    --accent: var(--srm-blue);
+    --accent-foreground: var(--srm-white);
 
     --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive-foreground: var(--srm-white);
 
     --border: var(--steel-700);
     --input: var(--steel-700);
-    --ring: var(--srm-blue);
+    --ring: var(--srm-red);
 
     --radius: 0.5rem;
 
     /* Gradients */
-    --gradient-hero: linear-gradient(135deg, hsl(var(--steel-900)) 0%, hsl(220 15% 6%) 50%, hsl(var(--steel-800)) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(var(--steel-900)) 0%, hsl(0 0% 8%) 50%, hsl(var(--steel-800)) 100%);
     --gradient-card: linear-gradient(180deg, hsl(var(--steel-800)) 0%, hsl(var(--steel-900)) 100%);
-    --gradient-glow: linear-gradient(135deg, hsl(var(--srm-blue) / 0.2) 0%, transparent 50%);
+    --gradient-srm: linear-gradient(135deg, hsl(var(--srm-red) / 0.15) 0%, transparent 30%, hsl(var(--srm-blue) / 0.15) 100%);
+    --gradient-diagonal: linear-gradient(135deg, hsl(var(--srm-red)) 0%, hsl(var(--srm-blue)) 100%);
 
     /* Shadows */
-    --shadow-glow: 0 0 40px hsl(var(--srm-blue) / 0.3);
+    --shadow-glow-red: 0 0 40px hsl(var(--srm-red) / 0.3);
+    --shadow-glow-blue: 0 0 40px hsl(var(--srm-blue) / 0.3);
     --shadow-card: 0 4px 24px hsl(0 0% 0% / 0.4);
     --shadow-elevated: 0 8px 32px hsl(0 0% 0% / 0.5);
 
     /* Sidebar */
     --sidebar-background: var(--steel-800);
-    --sidebar-foreground: var(--steel-100);
-    --sidebar-primary: var(--srm-blue);
-    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-foreground: var(--srm-white);
+    --sidebar-primary: var(--srm-red);
+    --sidebar-primary-foreground: var(--srm-white);
     --sidebar-accent: var(--steel-700);
-    --sidebar-accent-foreground: var(--steel-100);
+    --sidebar-accent-foreground: var(--srm-white);
     --sidebar-border: var(--steel-700);
-    --sidebar-ring: var(--srm-blue);
+    --sidebar-ring: var(--srm-red);
   }
 
   .light {
     --background: var(--steel-50);
     --foreground: var(--steel-900);
-    --card: 0 0% 100%;
+    --card: var(--srm-white);
     --card-foreground: var(--steel-900);
-    --primary: var(--srm-blue);
-    --primary-foreground: 0 0% 100%;
-    --secondary: var(--steel-200);
-    --secondary-foreground: var(--steel-900);
+    --primary: var(--srm-red);
+    --primary-foreground: var(--srm-white);
+    --secondary: var(--srm-blue);
+    --secondary-foreground: var(--srm-white);
     --muted: var(--steel-200);
     --muted-foreground: var(--steel-500);
     --border: var(--steel-300);
@@ -97,12 +105,11 @@
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased;
-    font-family: 'Inter', sans-serif;
+    @apply bg-background text-foreground font-body antialiased;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Space Grotesk', sans-serif;
+    @apply font-display;
   }
 }
 
@@ -115,12 +122,54 @@
     background-size: 40px 40px;
   }
 
-  /* Glow Effects */
-  .glow-blue {
-    box-shadow: var(--shadow-glow);
+  /* Dynamic Lines Background */
+  .dynamic-lines {
+    position: relative;
+    overflow: hidden;
   }
 
-  .glow-text {
+  .dynamic-lines::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: 
+      linear-gradient(135deg, hsl(var(--srm-red) / 0.1) 0%, transparent 40%),
+      linear-gradient(-45deg, hsl(var(--srm-blue) / 0.1) 0%, transparent 40%);
+    pointer-events: none;
+  }
+
+  /* Diagonal Stripes */
+  .diagonal-stripes {
+    background: repeating-linear-gradient(
+      135deg,
+      transparent,
+      transparent 50px,
+      hsl(var(--srm-red) / 0.05) 50px,
+      hsl(var(--srm-red) / 0.05) 52px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 50px,
+      hsl(var(--srm-blue) / 0.05) 50px,
+      hsl(var(--srm-blue) / 0.05) 52px
+    );
+  }
+
+  /* Glow Effects */
+  .glow-red {
+    box-shadow: var(--shadow-glow-red);
+  }
+
+  .glow-blue {
+    box-shadow: var(--shadow-glow-blue);
+  }
+
+  .glow-text-red {
+    text-shadow: 0 0 30px hsl(var(--srm-red) / 0.5);
+  }
+
+  .glow-text-blue {
     text-shadow: 0 0 30px hsl(var(--srm-blue) / 0.5);
   }
 
@@ -141,10 +190,33 @@
     box-shadow: var(--shadow-elevated);
   }
 
-  /* Divider Line */
+  /* Divider Lines */
   .divider-gradient {
-    background: linear-gradient(90deg, transparent, hsl(var(--srm-blue)), transparent);
+    background: linear-gradient(90deg, transparent, hsl(var(--srm-red)), hsl(var(--srm-blue)), transparent);
+    height: 2px;
+  }
+
+  .divider-red {
+    background: linear-gradient(90deg, transparent, hsl(var(--srm-red)), transparent);
     height: 1px;
+  }
+
+  /* Chat Dropzone */
+  .dropzone {
+    @apply border-2 border-dashed border-steel-600 rounded-xl p-8 transition-all duration-300;
+    background: hsl(var(--steel-800) / 0.5);
+  }
+
+  .dropzone:hover,
+  .dropzone.active {
+    @apply border-primary;
+    background: hsl(var(--srm-red) / 0.05);
+  }
+
+  .dropzone.dragging {
+    @apply border-secondary;
+    background: hsl(var(--srm-blue) / 0.1);
+    box-shadow: 0 0 20px hsl(var(--srm-blue) / 0.2);
   }
 }
 
@@ -173,6 +245,10 @@
     animation: pulseGlow 2s ease-in-out infinite;
   }
 
+  .animate-diagonal-slide {
+    animation: diagonalSlide 20s linear infinite;
+  }
+
   @keyframes fadeUp {
     from {
       opacity: 0;
@@ -186,10 +262,19 @@
 
   @keyframes pulseGlow {
     0%, 100% {
-      box-shadow: 0 0 20px hsl(var(--srm-blue) / 0.3);
+      box-shadow: 0 0 20px hsl(var(--srm-red) / 0.3);
     }
     50% {
-      box-shadow: 0 0 40px hsl(var(--srm-blue) / 0.5);
+      box-shadow: 0 0 40px hsl(var(--srm-red) / 0.5);
+    }
+  }
+
+  @keyframes diagonalSlide {
+    0% {
+      background-position: 0 0;
+    }
+    100% {
+      background-position: 100px 100px;
     }
   }
 }

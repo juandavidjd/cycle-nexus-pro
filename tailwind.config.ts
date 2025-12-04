@@ -14,8 +14,10 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
-        display: ['Space Grotesk', 'sans-serif'],
+        display: ['Montserrat', 'sans-serif'],
+        subtitle: ['Poppins', 'sans-serif'],
+        body: ['Roboto', 'sans-serif'],
+        sans: ['Roboto', 'sans-serif'],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -52,9 +54,15 @@ export default {
           foreground: "hsl(var(--card-foreground))",
         },
         srm: {
+          red: "hsl(var(--srm-red))",
+          "red-dark": "hsl(var(--srm-red-dark))",
+          "red-glow": "hsl(var(--srm-red-glow))",
+          black: "hsl(var(--srm-black))",
+          gray: "hsl(var(--srm-gray))",
           blue: "hsl(var(--srm-blue))",
           "blue-dark": "hsl(var(--srm-blue-dark))",
           "blue-glow": "hsl(var(--srm-blue-glow))",
+          white: "hsl(var(--srm-white))",
         },
         steel: {
           50: "hsl(var(--steel-50))",
@@ -102,8 +110,8 @@ export default {
           to: { transform: "translateX(0)", opacity: "1" },
         },
         "pulse-glow": {
-          "0%, 100%": { boxShadow: "0 0 20px hsl(var(--srm-blue) / 0.3)" },
-          "50%": { boxShadow: "0 0 40px hsl(var(--srm-blue) / 0.5)" },
+          "0%, 100%": { boxShadow: "0 0 20px hsl(var(--srm-red) / 0.3)" },
+          "50%": { boxShadow: "0 0 40px hsl(var(--srm-red) / 0.5)" },
         },
       },
       animation: {

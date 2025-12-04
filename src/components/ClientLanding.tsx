@@ -1,6 +1,6 @@
 import { Client } from "@/types/client";
 import { SRMButton } from "./SRMButton";
-import { ArrowLeft, Store, Package, FileText, View, Cog } from "lucide-react";
+import { ArrowLeft, Store, Package, FileText, View } from "lucide-react";
 
 interface ClientLandingProps {
   client: Client;
@@ -18,6 +18,7 @@ export function ClientLanding({ client }: ClientLandingProps) {
       >
         {/* Grid Pattern Overlay */}
         <div className="absolute inset-0 industrial-grid opacity-30" />
+        <div className="absolute inset-0 diagonal-stripes opacity-50" />
 
         {/* Glow Effect */}
         <div
@@ -40,7 +41,7 @@ export function ClientLanding({ client }: ClientLandingProps) {
           <div className="flex flex-col lg:flex-row items-start gap-8">
             {/* Brand Logo */}
             <div
-              className="w-32 h-32 rounded-2xl flex items-center justify-center text-5xl font-display font-bold text-white shrink-0"
+              className="w-32 h-32 rounded-2xl flex items-center justify-center text-5xl font-display font-extrabold text-white shrink-0"
               style={{
                 backgroundColor: client.palette.primary,
                 boxShadow: `0 0 60px ${client.palette.primary}40`,
@@ -52,7 +53,7 @@ export function ClientLanding({ client }: ClientLandingProps) {
             {/* Brand Info */}
             <div className="flex-1">
               <span
-                className="inline-block px-3 py-1 rounded-full text-sm font-medium mb-4"
+                className="inline-block px-3 py-1 rounded-full text-sm font-subtitle font-semibold mb-4"
                 style={{
                   backgroundColor: `${client.palette.primary}30`,
                   color: client.palette.primary,
@@ -61,12 +62,12 @@ export function ClientLanding({ client }: ClientLandingProps) {
                 {client.type}
               </span>
 
-              <h1 className="font-display font-bold text-4xl md:text-5xl text-foreground mb-4">
+              <h1 className="font-display font-extrabold text-4xl md:text-5xl text-foreground mb-4">
                 {client.name}
               </h1>
 
-              <p className="text-steel-300 text-lg max-w-2xl mb-8">
-                Ficha Técnica SRM + Atributos + Fitment + Conocimiento Unificado.
+              <p className="font-body text-steel-300 text-lg max-w-2xl mb-8">
+                Fichas y Terminología Técnica + Lógica de Inventarios para Ventas 360°.
                 Conectado al ecosistema técnico de motocicletas.
               </p>
 
@@ -112,8 +113,8 @@ export function ClientLanding({ client }: ClientLandingProps) {
             {/* Technical Sheet Placeholder */}
             <PlaceholderCard
               icon={FileText}
-              title="Ficha Técnica SRM"
-              description="Especificaciones técnicas detalladas, compatibilidad y fitment."
+              title="Fichas y Terminología Técnica"
+              description="Especificaciones técnicas detalladas, compatibilidad y fitment estandarizado."
               status="En desarrollo"
               accentColor={client.palette.primary}
             />
@@ -121,8 +122,8 @@ export function ClientLanding({ client }: ClientLandingProps) {
             {/* 360 View Placeholder */}
             <PlaceholderCard
               icon={View}
-              title="Ficha 360°"
-              description="Vista interactiva 360° de productos y componentes."
+              title="Lógica de Inventarios 360°"
+              description="Vista completa del inventario con integración en tiempo real."
               status="Próximamente"
               accentColor={client.palette.primary}
             />
@@ -134,28 +135,28 @@ export function ClientLanding({ client }: ClientLandingProps) {
       <section className="py-16 bg-steel-800/50">
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
-            <h2 className="font-display font-bold text-3xl text-foreground mb-4">
-              Conectado al Ecosistema SRM
+            <h2 className="font-display font-extrabold text-3xl text-foreground mb-4">
+              Conectado al Ecosistema <span className="text-primary">SRM</span>
             </h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              Integración completa con el pipeline técnico SRM v28 para gestión unificada de catálogo.
+            <p className="font-body text-muted-foreground max-w-2xl mx-auto">
+              Lógica de Inventarios para Ventas 360° con gestión unificada de catálogo.
             </p>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             <StatCard
               value="SRM"
-              label="Pipeline Técnico"
-              color={client.palette.primary}
-            />
-            <StatCard
-              value="v28"
-              label="Versión Actual"
+              label="Ecosistema"
               color={client.palette.primary}
             />
             <StatCard
               value="360°"
-              label="Ficha Interactiva"
+              label="Lógica de Inventarios"
+              color={client.palette.primary}
+            />
+            <StatCard
+              value="∞"
+              label="Fichas Técnicas"
               color={client.palette.primary}
             />
             <StatCard
@@ -188,16 +189,16 @@ function PlaceholderCard({ icon: Icon, title, description, status, accentColor }
         <Icon className="w-6 h-6" style={{ color: accentColor }} />
       </div>
 
-      <h3 className="font-display font-semibold text-lg text-foreground mb-2">
+      <h3 className="font-display font-bold text-lg text-foreground mb-2">
         {title}
       </h3>
 
-      <p className="text-muted-foreground text-sm mb-4">
+      <p className="font-body text-muted-foreground text-sm mb-4">
         {description}
       </p>
 
       <span
-        className="inline-block px-2 py-1 rounded text-xs font-medium"
+        className="inline-block px-2 py-1 rounded text-xs font-subtitle font-medium"
         style={{
           backgroundColor: `${accentColor}15`,
           color: accentColor,
@@ -217,14 +218,14 @@ interface StatCardProps {
 
 function StatCard({ value, label, color }: StatCardProps) {
   return (
-    <div className="text-center p-6 rounded-xl bg-steel-800 border border-border">
+    <div className="text-center p-6 rounded-xl bg-steel-800 border border-steel-700">
       <div
-        className="font-display font-bold text-3xl mb-2"
+        className="font-display font-extrabold text-3xl mb-2"
         style={{ color }}
       >
         {value}
       </div>
-      <div className="text-muted-foreground text-sm">{label}</div>
+      <div className="font-body text-muted-foreground text-sm">{label}</div>
     </div>
   );
 }

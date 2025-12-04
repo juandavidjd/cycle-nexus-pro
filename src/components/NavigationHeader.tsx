@@ -1,12 +1,13 @@
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { Menu, X, Cog } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { useState } from "react";
+import srmLogoHorizontal from "@/assets/srm-logo-horizontal.png";
 
 const navLinks = [
   { to: "/", label: "Inicio" },
   { to: "/catalogo", label: "Catálogo SRM" },
-  { to: "/clientes", label: "Clientes SRM" },
+  { to: "/clientes", label: "Clientes" },
 ];
 
 export function NavigationHeader() {
@@ -14,20 +15,16 @@ export function NavigationHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-background/90 backdrop-blur-lg border-b border-steel-700">
       <div className="container mx-auto px-4">
         <nav className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-3 group">
-            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center glow-blue group-hover:scale-105 transition-transform">
-              <Cog className="w-6 h-6 text-primary-foreground" />
-            </div>
-            <span className="font-display font-bold text-xl tracking-tight">
-              <span className="text-primary">SRM</span>
-              <span className="text-muted-foreground ml-1 text-sm font-normal hidden sm:inline">
-                Ecosistema Técnico
-              </span>
-            </span>
+            <img 
+              src={srmLogoHorizontal} 
+              alt="SRM - Somos Repuestos Motos" 
+              className="h-10 md:h-12 w-auto group-hover:scale-105 transition-transform"
+            />
           </Link>
 
           {/* Desktop Navigation */}
@@ -37,10 +34,10 @@ export function NavigationHeader() {
                 <Link
                   to={link.to}
                   className={cn(
-                    "px-4 py-2 rounded-lg font-medium transition-all duration-200",
+                    "px-4 py-2 rounded-lg font-subtitle font-medium transition-all duration-200",
                     location.pathname === link.to
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                      ? "bg-primary text-primary-foreground glow-red"
+                      : "text-muted-foreground hover:text-foreground hover:bg-steel-700"
                   )}
                 >
                   {link.label}
@@ -52,20 +49,20 @@ export function NavigationHeader() {
           {/* Mobile Menu Button */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 rounded-lg hover:bg-secondary transition-colors"
+            className="md:hidden p-2 rounded-lg hover:bg-steel-700 transition-colors"
             aria-label="Toggle menu"
           >
             {mobileMenuOpen ? (
-              <X className="w-6 h-6" />
+              <X className="w-6 h-6 text-foreground" />
             ) : (
-              <Menu className="w-6 h-6" />
+              <Menu className="w-6 h-6 text-foreground" />
             )}
           </button>
         </nav>
 
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
-          <div className="md:hidden py-4 border-t border-border animate-fade-up">
+          <div className="md:hidden py-4 border-t border-steel-700 animate-fade-up">
             <ul className="flex flex-col gap-2">
               {navLinks.map((link) => (
                 <li key={link.to}>
@@ -73,10 +70,10 @@ export function NavigationHeader() {
                     to={link.to}
                     onClick={() => setMobileMenuOpen(false)}
                     className={cn(
-                      "block px-4 py-3 rounded-lg font-medium transition-all duration-200",
+                      "block px-4 py-3 rounded-lg font-subtitle font-medium transition-all duration-200",
                       location.pathname === link.to
                         ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                        : "text-muted-foreground hover:text-foreground hover:bg-steel-700"
                     )}
                   >
                     {link.label}
