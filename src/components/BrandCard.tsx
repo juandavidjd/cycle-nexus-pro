@@ -27,7 +27,7 @@ export function BrandCard({ client, showType = true }: BrandCardProps) {
         {/* Logo & Info */}
         <div className="flex items-start gap-4 mb-6">
           <div
-            className="w-16 h-16 rounded-lg flex items-center justify-center text-2xl font-display font-bold text-white shrink-0 group-hover:scale-105 transition-transform"
+            className="w-16 h-16 rounded-lg flex items-center justify-center text-2xl font-display font-extrabold text-white shrink-0 group-hover:scale-105 transition-transform"
             style={{ backgroundColor: client.palette.primary }}
           >
             {client.name.charAt(0)}
@@ -38,7 +38,7 @@ export function BrandCard({ client, showType = true }: BrandCardProps) {
             </h3>
             {showType && (
               <span
-                className="inline-block px-2 py-0.5 rounded text-xs font-medium mt-1"
+                className="inline-block px-2 py-0.5 rounded text-xs font-subtitle font-medium mt-1"
                 style={{
                   backgroundColor: `${client.palette.primary}20`,
                   color: client.palette.primary,
@@ -51,8 +51,8 @@ export function BrandCard({ client, showType = true }: BrandCardProps) {
         </div>
 
         {/* Description Placeholder */}
-        <p className="text-muted-foreground text-sm mb-6 line-clamp-2">
-          Ficha Técnica SRM + Atributos + Fitment + Conocimiento Unificado del ecosistema.
+        <p className="font-body text-muted-foreground text-sm mb-6 line-clamp-2">
+          Fichas y Terminología Técnica + Lógica de Inventarios para Ventas 360°.
         </p>
 
         {/* Actions */}
@@ -64,7 +64,7 @@ export function BrandCard({ client, showType = true }: BrandCardProps) {
             brandColor={client.palette.primary}
             className="w-full"
           >
-            <span>Landing Técnica SRM</span>
+            <span>Landing del Cliente</span>
             <ArrowRight className="w-4 h-4" />
           </SRMButton>
 

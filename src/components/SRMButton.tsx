@@ -15,10 +15,10 @@ interface SRMButtonProps {
 }
 
 const variantStyles = {
-  primary: "bg-primary text-primary-foreground hover:bg-srm-blue-dark glow-blue",
-  secondary: "bg-secondary text-secondary-foreground hover:bg-steel-600",
+  primary: "bg-primary text-primary-foreground hover:bg-srm-red-dark glow-red",
+  secondary: "bg-secondary text-secondary-foreground hover:bg-srm-blue-dark glow-blue",
   outline: "border-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground",
-  ghost: "text-foreground hover:bg-secondary hover:text-secondary-foreground",
+  ghost: "text-foreground hover:bg-steel-700 hover:text-foreground",
   brand: "text-white font-semibold",
 };
 
@@ -40,7 +40,7 @@ export function SRMButton({
   external = false,
 }: SRMButtonProps) {
   const baseStyles = cn(
-    "inline-flex items-center justify-center gap-2 font-display font-semibold rounded-lg",
+    "inline-flex items-center justify-center gap-2 font-display font-bold rounded-lg",
     "transition-all duration-300 hover-lift",
     "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background",
     variantStyles[variant],

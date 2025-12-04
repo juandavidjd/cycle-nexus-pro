@@ -29,10 +29,10 @@ export function ClientTypeSection({ type, clients }: ClientTypeSectionProps) {
           <Icon className="w-6 h-6 text-primary" />
         </div>
         <div>
-          <h2 className="font-display font-bold text-2xl text-foreground">
+          <h2 className="font-display font-extrabold text-2xl text-foreground">
             {title}
           </h2>
-          <p className="text-muted-foreground text-sm">
+          <p className="font-body text-muted-foreground text-sm">
             {description}
           </p>
         </div>
