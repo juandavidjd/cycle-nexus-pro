@@ -1,0 +1,83 @@
+[
+  {
+    "id": "kaiqi",
+    "name": "Kaiqi",
+    "type": "Fabricante",
+    "logo": "/logos/kaiqi.png",
+    "palette": { "primary": "#0047FF", "accent": "#0A1133" },
+    "landing": "/kaiqi",
+    "shopify": "https://kaiqi.myshopify.com"
+  },
+  {
+    "id": "japan",
+    "name": "Japan",
+    "type": "Fabricante",
+    "logo": "/logos/japan.png",
+    "palette": { "primary": "#E3001B", "accent": "#1A1A1A" },
+    "landing": "/japan",
+    "shopify": "https://repuestosjapan.myshopify.com"
+  },
+  {
+    "id": "yokomar",
+    "name": "Yokomar",
+    "type": "Distribuidor",
+    "logo": "/logos/yokomar.png",
+    "palette": { "primary": "#FFC400", "accent": "#000000" },
+    "landing": "/yokomar",
+    "shopify": "https://yokomar-colombia.myshopify.com"
+  },
+  {
+    "id": "duna",
+    "name": "Duna",
+    "type": "Fabricante",
+    "logo": "/logos/duna.png",
+    "palette": { "primary": "#0077B6", "accent": "#023047" },
+    "landing": "/duna",
+    "shopify": "https://duna.myshopify.com"
+  },
+  {
+    "id": "bara",
+    "name": "Bara",
+    "type": "Importador",
+    "logo": "/logos/bara.png",
+    "palette": { "primary": "#D90429", "accent": "#2B2D42" },
+    "landing": "/bara",
+    "shopify": "https://bara-importaciones.myshopify.com"
+  },
+  {
+    "id": "vaisand",
+    "name": "Vaisand",
+    "type": "Distribuidor",
+    "logo": "/logos/vaisand.png",
+    "palette": { "primary": "#06D6A0", "accent": "#073B4C" },
+    "landing": "/vaisand",
+    "shopify": "https://vaisand.myshopify.com"
+  },
+  {
+    "id": "dfg",
+    "name": "DFG",
+    "type": "Importador",
+    "logo": "/logos/dfg.png",
+    "palette": { "primary": "#111111", "accent": "#666666" },
+    "landing": "/dfg",
+    "shopify": "https://dfg-parts.myshopify.com"
+  },
+  {
+    "id": "leo",
+    "name": "Leo",
+    "type": "Almacén",
+    "logo": "/logos/leo.png",
+    "palette": { "primary": "#FF6F00", "accent": "#212121" },
+    "landing": "/leo",
+    "shopify": "https://leo-motos.myshopify.com"
+  },
+  {
+    "id": "store",
+    "name": "Store",
+    "type": "Almacén",
+    "logo": "/logos/store.png",
+    "palette": { "primary": "#0096C7", "accent": "#1A1A1A" },
+    "landing": "/store",
+    "shopify": "https://store-motos.myshopify.com"
+  }
+]
