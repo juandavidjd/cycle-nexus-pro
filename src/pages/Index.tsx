@@ -16,8 +16,14 @@ import srmG from "@/assets/carousel/SRM_G.png";
 import srmH from "@/assets/carousel/SRM_H.png";
 import srmHM from "@/assets/carousel/SRM_HM.png";
 import srmI from "@/assets/carousel/SRM_I.png";
+import srmJ from "@/assets/carousel/SRM_J.png";
+import srmM2 from "@/assets/carousel/SRM_M2.png";
+import srmNO from "@/assets/carousel/SRM_NO.png";
+import srmO from "@/assets/carousel/SRM_O.png";
+import srmOP from "@/assets/carousel/SRM_OP.png";
+import srm3 from "@/assets/carousel/SRM_3.png";
 
-const carouselImages = [srmA, srmB, srmC, srmD, srmE, srmF, srmG, srmH, srmHM, srmI];
+const carouselImages = [srmA, srmB, srmC, srmD, srmE, srmF, srmG, srmH, srmHM, srmI, srmJ, srmM2, srmNO, srmO, srmOP, srm3];
 
 const Index = () => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
