@@ -36,10 +36,14 @@ export const CATALOG_CATEGORIES: CatalogCategory[] = [
       "Terminología unificada para toda la cadena"
     ],
     newsBoard: [
-      "Japan lanza nueva línea de frenos cerámicos 2024",
-      "Leo expande producción de amortiguadores OEM",
-      "Certificación ISO 9001 para fabricantes SRM",
-      "Nuevos estándares de calidad en suspensiones"
+      "Japan alcanza 10.000+ productos estandarizados en SRM, fortaleciendo la trazabilidad nacional.",
+      "Leo consolida su línea premium con compatibilidades 360°, mejorando tiempos de diagnóstico técnico.",
+      "Fabricantes conectados a SRM reportan 42% menos devoluciones gracias a fichas verificadas.",
+      "Nueva línea de frenos cerámicos 2024 disponible con terminología SRM, lista para distribuidores y talleres.",
+      "Estudios SRM revelan que las marcas con ingeniería real ganan 3X más confianza en decisiones de compra.",
+      "Estandarización SRM reduce 70% de errores de identificación en piezas OEM nacionales.",
+      "Fabricantes SRM ahora incluyen fichas 360° para fuerza de ventas, acelerando el canal nacional.",
+      "Pronto: Programa de certificación para fabricantes en Academia SRM."
     ],
     clients: [
       { id: "japan", name: "Japan", logo: "/logos/japan.png", shopify: "https://repuestosjapan.myshopify.com", landing: "/japan" },
@@ -62,11 +66,14 @@ export const CATALOG_CATEGORIES: CatalogCategory[] = [
       "Mapeo de compatibilidades cruzadas"
     ],
     newsBoard: [
-      "Bara amplía portafolio con línea taiwanesa",
-      "DFG incorpora transmisiones de alta gama",
-      "Duna recibe certificación de importador premium",
-      "Yokomar expande cobertura a 12 departamentos",
-      "Vaisand introduce línea de iluminación LED"
+      "DFG incorpora transmisiones de alta gama 2025 compatibles con la nomenclatura colombiana vía SRM.",
+      "Duna amplía catálogo digital con 5.000 referencias nuevas, totalmente mapeadas con fitment SRM.",
+      "Importadores SRM reportan 40% más eficiencia operativa tras homologación técnica.",
+      "SRM habilita traducción técnica automática para facilitar venta al por mayor.",
+      "Mapeo de compatibilidades cruzadas reduce hasta 60% devoluciones en importadores.",
+      "Yokomar integra catálogo con terminología SRM y supera 15.000 fichas técnicas.",
+      "Nuevas líneas de accesorios llegan a Colombia con compatibilidad 360° listas para distribuidores.",
+      "Academia SRM lanzará módulo: Cómo importar con riesgo técnico controlado."
     ],
     clients: [
       { id: "bara", name: "Bara", logo: "/logos/bara.png", shopify: "https://bara-importaciones.myshopify.com", landing: "/bara" },
@@ -92,10 +99,14 @@ export const CATALOG_CATEGORIES: CatalogCategory[] = [
       "Fichas técnicas para fuerza de ventas"
     ],
     newsBoard: [
-      "Kaiqi Parts amplía red de distribución nacional",
-      "Store alcanza cobertura en 8 ciudades principales",
-      "Nueva alianza logística reduce tiempos de entrega",
-      "Sistema de pedidos B2B integrado con SRM"
+      "SRM permite rotación optimizada por demanda regional, reduciendo sobreinventario.",
+      "Distribuidores SRM ya conectan más de 8 ciudades principales con disponibilidad confirmada.",
+      "Inventario unificado con terminología SRM mejora tiempos de despacho en 37%.",
+      "Reportes SRM revelan aumento de 22% en cierre de ventas gracias a fichas verificadas.",
+      "Distribuidores ahora asignan prioridades por zonas con inteligencia SRM.",
+      "Lanzamiento: Fichas técnicas para fuerza de ventas, acelerando respuesta al cliente final.",
+      "SRM habilita conexión directa con almacenes certificados, mejorando tiempos de reposición.",
+      "Academia SRM prepara módulo: Gestión del riesgo en distribución técnica."
     ],
     clients: [
       { id: "kaiqi", name: "Kaiqi Parts", role: "Distribuidor Nacional", logo: "/logos/kaiqi.png", shopify: "https://kaiqi.myshopify.com", landing: "/kaiqi" },
@@ -118,10 +129,14 @@ export const CATALOG_CATEGORIES: CatalogCategory[] = [
       "Historial de rotación y tendencias"
     ],
     newsBoard: [
-      "Casa China Motos inaugura nuevo punto de venta",
-      "Store implementa sistema de consulta SRM en mostrador",
-      "Capacitación técnica para vendedores de almacén",
-      "Nuevo sistema de garantías con trazabilidad SRM"
+      "Casa China Motos inaugura nuevo punto de venta con certificación SRM.",
+      "Almacenes SRM reducen 55% errores de mostrador con búsqueda inteligente.",
+      "SRM habilita historial técnico para vendedores, mejorando calidad de atención al mecánico.",
+      "Vendedores SRM ahora acceden a recomendaciones garantizadas, basadas en compatibilidad 360°.",
+      "Nueva actualización SRM permite mostrar variaciones por modelo/versión en tiempo real.",
+      "Almacenes certificados reportan incremento de 28% en ticket promedio gracias a fichas técnicas.",
+      "SRM añade opción de consultar rotación y tendencia por referencia, ideal para gerencia.",
+      "Academia SRM lanzará curso: Psicología de la venta técnica para mostradores."
     ],
     clients: [
       { id: "kaiqi-almacen", name: "Kaiqi Parts", role: "Casa China Motos", logo: "/logos/kaiqi.png", shopify: "https://kaiqi.myshopify.com", landing: "/kaiqi" },
@@ -144,10 +159,14 @@ export const CATALOG_CATEGORIES: CatalogCategory[] = [
       "Historial técnico de reparaciones"
     ],
     newsBoard: [
-      "Taller Casa China Motos recibe certificación SRM",
-      "Nuevo programa de capacitación para mecánicos",
-      "Herramienta de diagnóstico SRM disponible",
-      "Red de talleres certificados supera los 50 puntos"
+      "Taller Casa China Motos recibe certificación SRM, asegurando diagnóstico confiable.",
+      "Talleres SRM reducen hasta 80% el tiempo de identificación, gracias al fitment automatizado.",
+      "SRM ahora guarda histórico técnico de reparaciones, útil para seguimiento del mecánico.",
+      "Nueva función: búsqueda por sistema o aplicación (motor, suspensión, eléctrico).",
+      "Mecánicos con SRM reportan 3X más confianza al recomendar repuestos al cliente final.",
+      "Fichas 360° guían montaje seguro pieza a pieza, reduciendo riesgos de error.",
+      "Talleres conectados a SRM ganan reputación técnica y fidelidad natural del motociclista.",
+      "Academia SRM lanzará curso: Diagnóstico asistido + Fitment real."
     ],
     clients: [
       { id: "kaiqi-taller", name: "Kaiqi Parts", role: "Taller Casa China Motos", logo: "/logos/kaiqi.png", shopify: "https://kaiqi.myshopify.com", landing: "/kaiqi" }
