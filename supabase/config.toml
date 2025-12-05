@@ -1,0 +1,4 @@
+project_id = "xljdaioompdmuxmbjgze"
+
+[functions.srm-agents]
+verify_jwt = false

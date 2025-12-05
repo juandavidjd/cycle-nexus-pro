@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Upload, MessageSquare, GitBranch, Cpu, Sparkles, Zap } from 'lucide-react';
+import { Upload, MessageSquare, GitBranch, Cpu, Sparkles, Zap, Bot } from 'lucide-react';
 import { NavigationHeader } from '@/components/NavigationHeader';
 import { FooterSRM } from '@/components/FooterSRM';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SRMIntelligentProcessor } from '@/components/intelligent/SRMIntelligentProcessor';
 import { SRMTechnicalChat } from '@/components/intelligent/SRMTechnicalChat';
 import { SRMPipelineVisual } from '@/components/intelligent/SRMPipelineVisual';
+import { SRMAgentsSuite } from '@/components/agents/SRMAgentsSuite';
 
 const Intelligent = () => {
   const [activeTab, setActiveTab] = useState('processor');
@@ -262,6 +263,11 @@ const Intelligent = () => {
             </TabsContent>
           </Tabs>
         </div>
+      </section>
+
+      {/* Multi-Agent Suite */}
+      <section className="bg-steel-900/70 border-t border-steel-700">
+        <SRMAgentsSuite />
       </section>
 
       {/* Stats Section */}
