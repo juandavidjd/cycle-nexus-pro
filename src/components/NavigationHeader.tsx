@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Menu, X } from "lucide-react";
 import { useState } from "react";
-import srmLogoHorizontal from "@/assets/srm-logo-horizontal.png";
+import { SRMLogo } from "@/components/SRMLogo";
 
 const navLinks = [
   { to: "/", label: "Inicio" },
@@ -21,11 +21,8 @@ export function NavigationHeader() {
         <nav className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-3 group">
-            <img 
-              src={srmLogoHorizontal} 
-              alt="SRM - Somos Repuestos Motos" 
-              className="h-10 md:h-12 w-auto group-hover:scale-105 transition-transform"
-            />
+            <SRMLogo className="h-10 w-10 md:h-12 md:w-12 group-hover:scale-105 transition-transform" />
+            <span className="hidden sm:block font-title font-extrabold text-foreground text-lg">SRM</span>
           </Link>
 
           {/* Desktop Navigation */}

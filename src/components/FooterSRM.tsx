@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Mail, Phone, MapPin } from "lucide-react";
-import srmLogoHorizontal from "@/assets/srm-logo-horizontal.png";
+import { SRMLogo } from "@/components/SRMLogo";
 
 export function FooterSRM() {
   return (
@@ -9,12 +9,9 @@ export function FooterSRM() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* Brand */}
           <div className="md:col-span-2">
-            <Link to="/" className="inline-block mb-4">
-              <img 
-                src={srmLogoHorizontal} 
-                alt="SRM - Somos Repuestos Motos" 
-                className="h-12 w-auto"
-              />
+            <Link to="/" className="inline-flex items-center gap-3 mb-4">
+              <SRMLogo className="h-12 w-12" />
+              <span className="font-title font-extrabold text-foreground text-xl">SRM</span>
             </Link>
             <p className="font-body text-muted-foreground max-w-md">
               Tecnología + Catálogo Unificado + Conocimiento Técnico para la Industria de Motocicletas.
