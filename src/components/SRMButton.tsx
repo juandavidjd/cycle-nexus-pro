@@ -8,7 +8,7 @@ interface SRMButtonProps {
   size?: 'sm' | 'md' | 'lg';
   to?: string;
   href?: string;
-  onClick?: () => void;
+  onClick?: (e?: React.MouseEvent<HTMLButtonElement>) => void;
   className?: string;
   brandColor?: string;
   external?: boolean;
