@@ -25,15 +25,15 @@ export const CATALOG_CATEGORIES: CatalogCategory[] = [
     id: "fabricantes",
     title: "Fabricantes",
     emotionalTitle: "Fabricantes que mueven la industria con ingeniería real",
-    subtitle: "Marcas que diseñan y producen repuestos originales con estándares de calidad internacional",
+    subtitle: "Marcas que diseñan y producen repuestos originales con estándares de calidad internacional.",
     icon: "Factory",
-    narrative: "Detrás de cada pieza que mantiene una moto en movimiento, hay un fabricante que entiende la responsabilidad de crear productos que salvan vidas. Los fabricantes SRM no solo producen repuestos: diseñan confianza, fabrican seguridad y entregan tranquilidad. Cuando eliges un fabricante certificado SRM, estás eligiendo la ingeniería que respeta tu tiempo, tu dinero y tu camino.",
+    narrative: "Detrás de cada pieza que mantiene una moto en movimiento, hay un fabricante que entiende la responsabilidad de crear productos que salvan vidas. Los fabricantes SRM son conocimiento puro convertido en repuesto: diseño que inspira confianza, ingeniería que garantiza seguridad y calidad verificada. Cuando eliges un fabricante certificado SRM, eliges fiabilidad, tiempo y camino.",
     benefits: [
-      "Estandarización técnica de catálogos completos",
-      "Fichas 360° con especificaciones verificadas",
+      "Estandarización técnica con códigos unificados",
       "Integración directa con distribuidores y talleres",
-      "Terminología unificada para toda la cadena",
-      "Visibilidad en el ecosistema SRM nacional"
+      "Visibilidad en el ecosistema SRM nacional",
+      "Fichas 360° con especificaciones verificadas",
+      "Terminología unificada para toda la cadena"
     ],
     newsBoard: [
       "Japan lanza nueva línea de frenos cerámicos 2024",
@@ -51,15 +51,15 @@ export const CATALOG_CATEGORIES: CatalogCategory[] = [
     id: "importadores",
     title: "Importadores",
     emotionalTitle: "Importadores que mantienen vivo el flujo técnico del país",
-    subtitle: "Empresas que conectan la tecnología internacional con el mercado colombiano",
+    subtitle: "Empresas que conectan la tecnología internacional con el mercado colombiano.",
     icon: "Ship",
-    narrative: "Cada contenedor que cruza el océano trae más que productos: trae soluciones, innovación y oportunidades. Los importadores SRM son el puente invisible que conecta la ingeniería mundial con el taller de tu barrio. Sin ellos, la industria se detendría. Con SRM, su catálogo se vuelve comprensible, estandarizado y listo para vender. Porque importar no es solo traer: es traducir el mundo técnico para Colombia.",
+    narrative: "Cada contenedor que cruza el océano trae más que productos: trae soluciones, innovación y oportunidades. Los importadores SRM son el puente invisible que conecta la ingeniería mundial con el taller de barrio. Sin ellos, la industria se detendría. Con SRM, su catálogo se vuelve comprensible, estandarizado y listo para vender. Porque importar no es solo traer: es traducir el mundo técnico para Colombia.",
     benefits: [
       "Normalización de catálogos internacionales",
-      "Traducción técnica automática",
       "Homologación con nomenclatura colombiana",
-      "Mapeo de compatibilidades cruzadas",
-      "Conexión directa con red de distribuidores"
+      "Conexión directa con red de distribuidores",
+      "Traducción técnica automática",
+      "Mapeo de compatibilidades cruzadas"
     ],
     newsBoard: [
       "Bara amplía portafolio con línea taiwanesa",
@@ -81,15 +81,15 @@ export const CATALOG_CATEGORIES: CatalogCategory[] = [
     id: "distribuidores",
     title: "Distribuidores",
     emotionalTitle: "Distribuidores que conectan la industria con todo el país",
-    subtitle: "La red logística que garantiza disponibilidad donde más se necesita",
+    subtitle: "La red logística que garantiza disponibilidad donde más se necesita.",
     icon: "Truck",
-    narrative: "Mientras tú duermes, los distribuidores SRM están moviendo el país. Son los arterias de la industria, llevando cada pieza al lugar exacto donde un mecánico la necesita. Un distribuidor eficiente no solo entrega productos: entrega tiempo, resuelve urgencias y mantiene negocios funcionando. Con SRM, su inventario habla el mismo idioma técnico que fabricantes y talleres.",
+    narrative: "Mientras tú duermes, los distribuidores SRM están moviendo el país. Son las arterias de la industria, llevando cada pieza al lugar exacto donde un mecánico la necesita. Un distribuidor eficiente no solo entrega productos: entrega tiempo, respuesta y continuidad. Con SRM, su inventario habla el mismo idioma técnico que fabricantes y talleres.",
     benefits: [
       "Inventario unificado con terminología SRM",
-      "Rotación optimizada por demanda regional",
       "Conexión B2B con almacenes certificados",
-      "Fichas técnicas para fuerza de ventas",
-      "Reportes de tendencias por zona"
+      "Reportes de tendencias por zona",
+      "Rotación optimizada por demanda regional",
+      "Fichas técnicas para fuerza de ventas"
     ],
     newsBoard: [
       "Kaiqi Parts amplía red de distribución nacional",
@@ -107,15 +107,15 @@ export const CATALOG_CATEGORIES: CatalogCategory[] = [
     id: "almacenes",
     title: "Almacenes",
     emotionalTitle: "Almacenes que impulsan al mecánico con información confiable",
-    subtitle: "Puntos de venta especializados con conocimiento técnico real",
+    subtitle: "Puntos de venta especializados con conocimiento técnico real.",
     icon: "Warehouse",
-    narrative: "El almacén de repuestos es donde la teoría se encuentra con la realidad. Es el lugar donde un mecánico confía su reputación y un motociclista su seguridad. Los almacenes SRM no solo venden piezas: asesoran, recomiendan y garantizan. Porque vender sin conocimiento es arriesgar vidas. Con SRM, cada vendedor tiene acceso a la ficha técnica completa de cada producto.",
+    narrative: "El almacén de repuestos es donde la teoría se convierte en realidad. Es el lugar donde un mecánico confía su reputación y un motociclista su seguridad. Los almacenes SRM no solo venden piezas: asesoran, recomiendan y garantizan. Porque vender sin conocimiento es arriesgar vidas. Con SRM, cada vendedor tiene acceso a la ficha técnica completa de cada producto.",
     benefits: [
       "Catálogo digital con búsqueda inteligente",
-      "Fichas técnicas para mostrador",
       "Compatibilidades verificadas por SRM",
-      "Historial de rotación y tendencias",
-      "Conexión directa con proveedores certificados"
+      "Conexión directa con proveedores certificados",
+      "Fichas técnicas para mostrador",
+      "Historial de rotación y tendencias"
     ],
     newsBoard: [
       "Casa China Motos inaugura nuevo punto de venta",
@@ -133,15 +133,15 @@ export const CATALOG_CATEGORIES: CatalogCategory[] = [
     id: "talleres",
     title: "Talleres",
     emotionalTitle: "Talleres que convierten problemas en movimiento",
-    subtitle: "Los expertos que mantienen a Colombia rodando con confianza",
+    subtitle: "Los expertos que mantienen a Colombia rodando con confianza.",
     icon: "Wrench",
     narrative: "Un taller no es solo un lugar de reparación: es donde se restaura la confianza, se recupera la movilidad y se protegen familias. El mecánico SRM no adivina: diagnostica con información técnica real. No improvisa: instala con especificaciones verificadas. El taller conectado a SRM es un taller que respeta su oficio y honra la confianza de sus clientes.",
     benefits: [
       "Diagnóstico asistido por fichas técnicas",
-      "Búsqueda de repuestos por síntoma o aplicación",
       "Conexión directa con proveedores cercanos",
-      "Historial técnico de reparaciones",
-      "Certificación SRM para talleres de confianza"
+      "Certificación SRM para talleres de confianza",
+      "Búsqueda de repuestos por sistema o aplicación",
+      "Historial técnico de reparaciones"
     ],
     newsBoard: [
       "Taller Casa China Motos recibe certificación SRM",
