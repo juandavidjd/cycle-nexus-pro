@@ -15,14 +15,14 @@ const Index = () => {
         className="relative flex-1"
         style={{
           backgroundImage: `url(${srmMuralBg})`,
-          backgroundSize: '85%',
-          backgroundPosition: 'center 20%',
+          backgroundSize: '100%',
+          backgroundPosition: 'center 15%',
           backgroundAttachment: 'fixed',
           backgroundRepeat: 'no-repeat',
         }}
       >
         {/* Dark overlay for readability */}
-        <div className="absolute inset-0 bg-background/60" />
+        <div className="absolute inset-0 bg-background/50" />
 
         {/* Hero Section */}
         <section className="relative pt-32 pb-24 overflow-hidden">
