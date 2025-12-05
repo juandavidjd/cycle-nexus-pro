@@ -16,12 +16,12 @@ const Index = () => {
         style={{
           backgroundImage: `url(${srmMuralBg})`,
           backgroundSize: 'cover',
-          backgroundPosition: 'center top',
+          backgroundPosition: 'center center',
           backgroundAttachment: 'fixed',
         }}
       >
         {/* Dark overlay for readability */}
-        <div className="absolute inset-0 bg-background/70" />
+        <div className="absolute inset-0 bg-background/60" />
 
         {/* Hero Section */}
         <section className="relative pt-32 pb-24 overflow-hidden">

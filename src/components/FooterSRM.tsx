@@ -68,7 +68,7 @@ export function FooterSRM() {
         {/* Bottom Bar */}
         <div className="divider-gradient my-8" />
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-sm font-body text-muted-foreground">
-          <p>© 2024 SRM — Somos Repuestos Motos. Todos los derechos reservados.</p>
+          <p>© 2025 SRM — Somos Repuestos Motos. Todos los derechos reservados.</p>
           <p className="text-steel-500">Lógica de Inventarios 360°</p>
         </div>
       </div>
