@@ -15,9 +15,10 @@ const Index = () => {
         className="relative flex-1"
         style={{
           backgroundImage: `url(${srmMuralBg})`,
-          backgroundSize: '90%',
-          backgroundPosition: 'center 20%',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center center',
           backgroundRepeat: 'no-repeat',
+          backgroundAttachment: 'fixed',
         }}
       >
         {/* Dark overlay for readability */}
