@@ -1,120 +1,161 @@
 import { NavigationHeader } from "@/components/NavigationHeader";
 import { FooterSRM } from "@/components/FooterSRM";
-import { CatalogGrid } from "@/components/CatalogGrid";
-import { Client } from "@/types/client";
-import clientsData from "@/data/clients.json";
-import { Search, Filter } from "lucide-react";
-import { useState, useMemo } from "react";
+import { CategoryCard } from "@/components/catalog/CategoryCard";
+import { NewsTicker } from "@/components/catalog/NewsTicker";
+import { AcademiaSection } from "@/components/catalog/AcademiaSection";
+import { CATALOG_CATEGORIES } from "@/data/catalog-categories";
+import { useState } from "react";
+import { Factory, Ship, Truck, Warehouse, Wrench, Sparkles } from "lucide-react";
+
+const quickFilterIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+  fabricantes: Factory,
+  importadores: Ship,
+  distribuidores: Truck,
+  almacenes: Warehouse,
+  talleres: Wrench,
+};
 
 const Catalogo = () => {
-  const clients = clientsData as Client[];
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterType, setFilterType] = useState<string>("all");
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<string | null>(null);
 
-  const uniqueTypes = useMemo(() => {
-    const types = [...new Set(clients.map(c => c.type))];
-    return types;
-  }, [clients]);
+  const handleToggle = (categoryId: string) => {
+    setExpandedCategory(expandedCategory === categoryId ? null : categoryId);
+  };
 
-  const filteredClients = useMemo(() => {
-    return clients.filter(client => {
-      const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesType = filterType === "all" || client.type === filterType;
-      return matchesSearch && matchesType;
-    });
-  }, [clients, searchTerm, filterType]);
+  const filteredCategories = activeFilter 
+    ? CATALOG_CATEGORIES.filter(c => c.id === activeFilter)
+    : CATALOG_CATEGORIES;
+
+  const totalClients = CATALOG_CATEGORIES.reduce((acc, cat) => acc + cat.clients.length, 0);
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <NavigationHeader />
 
-      {/* Header */}
-      <section className="pt-32 pb-12 relative overflow-hidden dynamic-lines">
-        <div className="absolute inset-0 industrial-grid opacity-30" />
-        <div className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-secondary/10 rounded-full blur-3xl" />
+      {/* Hero Header */}
+      <section className="pt-32 pb-12 relative overflow-hidden">
+        {/* Background Effects */}
+        <div className="absolute inset-0 industrial-grid opacity-20" />
+        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-primary/10 rounded-full blur-[120px]" />
+        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-srm-blue/10 rounded-full blur-[100px]" />
+        
+        {/* Dynamic Lines */}
+        <div className="absolute inset-0 dynamic-lines opacity-30" />
 
         <div className="container mx-auto px-4 relative z-10">
-          <div className="max-w-3xl">
-            <span className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-subtitle font-semibold mb-4">
-              Catálogo Completo
-            </span>
-            <h1 className="font-display font-extrabold text-4xl md:text-5xl text-foreground mb-4">
+          <div className="max-w-4xl">
+            <div className="flex items-center gap-3 mb-6">
+              <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-subtitle font-semibold">
+                <Sparkles className="w-4 h-4" />
+                Catálogo Profesional
+              </span>
+              <span className="px-3 py-1 rounded-full bg-steel-700 text-steel-300 text-sm font-body">
+                {totalClients} clientes activos
+              </span>
+            </div>
+            
+            <h1 className="font-display font-extrabold text-4xl md:text-5xl lg:text-6xl text-foreground mb-6 leading-tight">
               Catálogo <span className="text-primary">SRM</span>
+              <span className="block text-2xl md:text-3xl text-steel-400 font-subtitle font-semibold mt-2">
+                Fichas y Terminología Técnica
+              </span>
             </h1>
-            <p className="font-body text-muted-foreground text-lg">
-              Explora todos los clientes del ecosistema técnico. Fichas y Terminología Técnica con tiendas oficiales.
+            
+            <p className="font-body text-muted-foreground text-lg md:text-xl max-w-3xl leading-relaxed">
+              Explora el ecosistema técnico más completo de la industria de motocicletas. 
+              Fabricantes, importadores, distribuidores, almacenes y talleres conectados 
+              por la <span className="text-primary font-semibold">Lógica de Inventarios 360°</span>.
             </p>
           </div>
         </div>
       </section>
 
-      {/* Filters */}
-      <section className="py-6 border-y border-steel-700 bg-steel-800/30">
-        <div className="container mx-auto px-4">
-          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-            {/* Search */}
-            <div className="relative w-full md:w-80">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Buscar cliente..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-background border border-steel-700 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent font-body"
-              />
-            </div>
+      {/* News Ticker */}
+      <NewsTicker />
 
-            {/* Type Filter */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <Filter className="w-4 h-4 text-muted-foreground" />
-              <button
-                onClick={() => setFilterType("all")}
-                className={`px-3 py-1.5 rounded-lg text-sm font-subtitle font-medium transition-colors ${
-                  filterType === "all"
-                    ? "bg-primary text-primary-foreground glow-red"
-                    : "bg-steel-700 text-steel-300 hover:bg-steel-600"
-                }`}
-              >
-                Todos
-              </button>
-              {uniqueTypes.map(type => (
+      {/* Quick Filters */}
+      <section className="py-6 border-b border-steel-700 bg-steel-800/30 sticky top-20 z-30 backdrop-blur-sm">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide">
+            <span className="font-subtitle text-sm text-steel-400 flex-shrink-0">Filtrar:</span>
+            <button
+              onClick={() => setActiveFilter(null)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-subtitle font-medium transition-all flex-shrink-0 ${
+                activeFilter === null
+                  ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30"
+                  : "bg-steel-700 text-steel-300 hover:bg-steel-600"
+              }`}
+            >
+              Todos
+            </button>
+            {CATALOG_CATEGORIES.map((category) => {
+              const IconComponent = quickFilterIcons[category.id] || Factory;
+              return (
                 <button
-                  key={type}
-                  onClick={() => setFilterType(type)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-subtitle font-medium transition-colors ${
-                    filterType === type
-                      ? "bg-primary text-primary-foreground glow-red"
+                  key={category.id}
+                  onClick={() => setActiveFilter(activeFilter === category.id ? null : category.id)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-subtitle font-medium transition-all flex-shrink-0 ${
+                    activeFilter === category.id
+                      ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30"
                       : "bg-steel-700 text-steel-300 hover:bg-steel-600"
                   }`}
                 >
-                  {type}
+                  <IconComponent className="w-4 h-4" />
+                  {category.title}
+                  <span className="text-xs opacity-70">({category.clients.length})</span>
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
         </div>
       </section>
 
-      {/* Catalog Grid */}
+      {/* Categories Grid */}
       <section className="py-12 flex-1">
         <div className="container mx-auto px-4">
-          {filteredClients.length > 0 ? (
-            <>
-              <p className="font-body text-muted-foreground mb-6">
-                Mostrando {filteredClients.length} cliente{filteredClients.length !== 1 ? 's' : ''}
-              </p>
-              <CatalogGrid clients={filteredClients} />
-            </>
-          ) : (
-            <div className="text-center py-16">
-              <p className="font-body text-muted-foreground text-lg">
-                No se encontraron clientes con los filtros seleccionados.
-              </p>
-            </div>
-          )}
+          <div className="space-y-6">
+            {filteredCategories.map((category, index) => (
+              <div
+                key={category.id}
+                className="animate-fade-up"
+                style={{ animationDelay: `${index * 0.1}s` }}
+              >
+                <CategoryCard
+                  category={category}
+                  isExpanded={expandedCategory === category.id}
+                  onToggle={() => handleToggle(category.id)}
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* Stats Section */}
+          <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { value: "9+", label: "Clientes Activos", color: "primary" },
+              { value: "360°", label: "Fichas Técnicas", color: "srm-blue" },
+              { value: "5", label: "Categorías", color: "green-500" },
+              { value: "∞", label: "Productos Integrados", color: "purple-500" },
+            ].map((stat, index) => (
+              <div 
+                key={index}
+                className="bg-steel-800/50 rounded-xl border border-steel-700 p-6 text-center hover:border-primary/30 transition-colors"
+              >
+                <div className={`font-display font-extrabold text-3xl md:text-4xl text-${stat.color} mb-2`}>
+                  {stat.value}
+                </div>
+                <div className="font-body text-steel-400 text-sm">
+                  {stat.label}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
+
+      {/* Academia Section */}
+      <AcademiaSection />
 
       <FooterSRM />
     </div>
