@@ -58,15 +58,24 @@ const Catalogo = () => {
             <h1 className="font-display font-extrabold text-4xl md:text-5xl lg:text-6xl text-foreground mb-6 leading-tight">
               Catálogo <span className="text-primary">SRM</span>
               <span className="block text-2xl md:text-3xl text-steel-400 font-subtitle font-semibold mt-2">
-                Fichas y Terminología Técnica
+                Fichas y Terminología Técnica Profesional
               </span>
             </h1>
             
-            <p className="font-body text-muted-foreground text-lg md:text-xl max-w-3xl leading-relaxed">
+            <p className="font-body text-muted-foreground text-lg md:text-xl max-w-3xl leading-relaxed mb-8">
               Explora el ecosistema técnico más completo de la industria de motocicletas. 
               Fabricantes, importadores, distribuidores, almacenes y talleres conectados 
               por la <span className="text-primary font-semibold">Lógica de Inventarios 360°</span>.
             </p>
+
+            {/* Bloque de poder - Neuromarketing */}
+            <div className="bg-steel-800/60 border border-steel-700 rounded-xl p-6 backdrop-blur-sm">
+              <p className="font-body text-foreground/90 text-base md:text-lg leading-relaxed">
+                <span className="text-primary font-semibold">SRM</span> transforma catálogos en información confiable, 
+                reduce errores, acelera ventas y crea un <span className="text-secondary font-semibold">lenguaje unificado</span> para 
+                toda la cadena técnica de repuestos.
+              </p>
+            </div>
           </div>
         </div>
       </section>
