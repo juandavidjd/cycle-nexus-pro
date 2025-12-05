@@ -278,3 +278,18 @@
     }
   }
 }
+
+/* Mural background responsive positioning */
+.mural-bg {
+  background-attachment: fixed;
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center center;
+}
+
+@media (max-width: 768px) {
+  .mural-bg {
+    background-position: 35% center;
+    background-size: auto 100%;
+  }
+}

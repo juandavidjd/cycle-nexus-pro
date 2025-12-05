@@ -12,13 +12,9 @@ const Index = () => {
 
       {/* Main content with mural background */}
       <div 
-        className="relative flex-1"
+        className="relative flex-1 mural-bg"
         style={{
           backgroundImage: `url(${srmMuralBg})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center center',
-          backgroundRepeat: 'no-repeat',
-          backgroundAttachment: 'fixed',
         }}
       >
         {/* Dark overlay for readability */}
