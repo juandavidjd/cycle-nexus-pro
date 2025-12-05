@@ -2,8 +2,8 @@ import { NavigationHeader } from "@/components/NavigationHeader";
 import { FooterSRM } from "@/components/FooterSRM";
 import { SRMButton } from "@/components/SRMButton";
 import { ChatUploader } from "@/components/ChatUploader";
+import { SRMLogo } from "@/components/SRMLogo";
 import { ChevronRight, Factory, Users, Database, Zap, Cpu } from "lucide-react";
-import srmLogoDiagonal from "@/assets/srm-logo-diagonal.png";
 
 const Index = () => {
   return (
@@ -22,11 +22,7 @@ const Index = () => {
           <div className="max-w-4xl mx-auto text-center">
             {/* Logo */}
             <div className="mb-8 animate-fade-up">
-              <img 
-                src={srmLogoDiagonal} 
-                alt="SRM - Somos Repuestos Motos" 
-                className="w-48 md:w-64 mx-auto drop-shadow-2xl"
-              />
+              <SRMLogo className="w-48 md:w-64 mx-auto drop-shadow-2xl" />
             </div>
 
             {/* Title */}
