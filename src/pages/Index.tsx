@@ -2,7 +2,7 @@ import { NavigationHeader } from "@/components/NavigationHeader";
 import { FooterSRM } from "@/components/FooterSRM";
 import { SRMButton } from "@/components/SRMButton";
 import { ChatUploader } from "@/components/ChatUploader";
-import { ChevronRight, Factory, Users, Database, Zap } from "lucide-react";
+import { ChevronRight, Factory, Users, Database, Zap, Cpu } from "lucide-react";
 import srmLogoDiagonal from "@/assets/srm-logo-diagonal.png";
 
 const Index = () => {
@@ -45,11 +45,15 @@ const Index = () => {
               <span className="text-secondary font-semibold">ventas 360°</span>
             </p>
 
-            {/* Single CTA Button */}
-            <div className="flex justify-center animate-fade-up-delay-3">
+            {/* CTA Buttons */}
+            <div className="flex flex-wrap justify-center gap-4 animate-fade-up-delay-3">
               <SRMButton to="/catalogo" variant="primary" size="lg">
                 Catálogo SRM
                 <ChevronRight className="w-5 h-5" />
+              </SRMButton>
+              <SRMButton to="/intelligent" variant="secondary" size="lg">
+                <Cpu className="w-5 h-5" />
+                SRM Intelligent
               </SRMButton>
             </div>
           </div>
