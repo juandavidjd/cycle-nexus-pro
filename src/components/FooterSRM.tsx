@@ -1,10 +1,15 @@
 import { Link } from "react-router-dom";
 import { Mail, Phone, MapPin } from "lucide-react";
 import { SRMLogo } from "@/components/SRMLogo";
+import { cn } from "@/lib/utils";
 
-export function FooterSRM() {
+interface FooterSRMProps {
+  className?: string;
+}
+
+export function FooterSRM({ className }: FooterSRMProps) {
   return (
-    <footer className="bg-steel-900 border-t border-steel-700 mt-auto">
+    <footer className={cn("bg-steel-900 border-t border-steel-700 mt-auto", className)}>
       <div className="container mx-auto px-4 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* Brand */}
