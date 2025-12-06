@@ -9,7 +9,7 @@ const navLinks = [
   { to: "/catalogo", label: "Catálogo SRM" },
   { to: "/clientes", label: "Clientes" },
   { to: "/intelligent", label: "SRM Intelligent" },
-  { to: "/catalogo#academia", label: "Academia" },
+  { to: "/academia", label: "Academia" },
 ];
 
 export function NavigationHeader() {

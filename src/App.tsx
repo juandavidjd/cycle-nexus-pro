@@ -8,6 +8,8 @@ import Catalogo from "./pages/Catalogo";
 import Clientes from "./pages/Clientes";
 import ClientPage from "./pages/ClientPage";
 import Intelligent from "./pages/Intelligent";
+import Academia from "./pages/Academia";
+import AcademiaModulo from "./pages/AcademiaModulo";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -23,6 +25,8 @@ const App = () => (
           <Route path="/catalogo" element={<Catalogo />} />
           <Route path="/clientes" element={<Clientes />} />
           <Route path="/intelligent" element={<Intelligent />} />
+          <Route path="/academia" element={<Academia />} />
+          <Route path="/academia/modulo/:id" element={<AcademiaModulo />} />
           <Route path="/:clientId" element={<ClientPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
