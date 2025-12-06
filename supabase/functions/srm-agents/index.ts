@@ -5,6 +5,61 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Validation constants
+const MAX_MESSAGE_LENGTH = 4000;
+const MAX_HISTORY_MESSAGES = 50;
+const VALID_AGENT_TYPES = ['voice', 'designer', 'instructor', 'sales', 'architect'];
+
+// Input validation helper
+function validateRequest(body: unknown): { valid: true; data: { agentType: string; userMessage: string; conversationHistory: Array<{ role: string; content: string }> } } | { valid: false; error: string } {
+  if (!body || typeof body !== 'object') {
+    return { valid: false, error: 'Solicitud inválida' };
+  }
+
+  const { agentType, userMessage, conversationHistory } = body as Record<string, unknown>;
+
+  // Validate agentType
+  if (typeof agentType !== 'string' || !VALID_AGENT_TYPES.includes(agentType)) {
+    return { valid: false, error: 'Tipo de agente inválido' };
+  }
+
+  // Validate userMessage
+  if (typeof userMessage !== 'string' || userMessage.trim().length === 0) {
+    return { valid: false, error: 'El mensaje no puede estar vacío' };
+  }
+  if (userMessage.length > MAX_MESSAGE_LENGTH) {
+    return { valid: false, error: `El mensaje excede el límite de ${MAX_MESSAGE_LENGTH} caracteres` };
+  }
+
+  // Validate conversationHistory
+  if (conversationHistory !== undefined && !Array.isArray(conversationHistory)) {
+    return { valid: false, error: 'Historial de conversación inválido' };
+  }
+
+  const history = Array.isArray(conversationHistory) ? conversationHistory.slice(-MAX_HISTORY_MESSAGES) : [];
+  
+  for (const msg of history) {
+    if (!msg || typeof msg !== 'object') {
+      return { valid: false, error: 'Mensaje en historial inválido' };
+    }
+    if (msg.role !== 'user' && msg.role !== 'assistant') {
+      return { valid: false, error: 'Rol de mensaje inválido' };
+    }
+    if (typeof msg.content !== 'string' || msg.content.length > MAX_MESSAGE_LENGTH) {
+      return { valid: false, error: 'Contenido de mensaje inválido o muy largo' };
+    }
+  }
+
+  return {
+    valid: true,
+    data: {
+      agentType,
+      userMessage: userMessage.trim(),
+      conversationHistory: history,
+    },
+  };
+}
+
 // System prompts for each specialized agent
 const AGENT_PROMPTS: Record<string, string> = {
   voice: `Eres el SRM Voice Assistant, narrador técnico-comercial de SRM (Somos Repuestos Motos).
@@ -207,7 +262,18 @@ serve(async (req) => {
       );
     }
 
-    const { agentType, userMessage, conversationHistory } = await req.json();
+    const body = await req.json();
+    
+    // Validate request body
+    const validation = validateRequest(body);
+    if (!validation.valid) {
+      return new Response(
+        JSON.stringify({ error: validation.error }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { agentType, userMessage, conversationHistory } = validation.data;
     
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
@@ -222,14 +288,14 @@ serve(async (req) => {
     
     const messages = [
       { role: 'system', content: systemPrompt },
-      ...(conversationHistory || []).map((msg: { role: string; content: string }) => ({
+      ...conversationHistory.map((msg) => ({
         role: msg.role,
         content: msg.content,
       })),
       { role: 'user', content: userMessage },
     ];
 
-    console.log(`Agent request: ${agentType}, message length: ${userMessage?.length || 0}`);
+    console.log(`Agent request: ${agentType}, message length: ${userMessage.length}, history: ${conversationHistory.length}`);
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
