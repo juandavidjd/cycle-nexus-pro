@@ -1,9 +1,27 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Loader2, Copy, Check, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
+import { z } from 'zod';
+
+// Validation constants
+const MAX_MESSAGE_LENGTH = 4000;
+const MAX_HISTORY_MESSAGES = 50;
+const THROTTLE_MS = 1000;
+
+// Validation schemas
+const messageSchema = z.object({
+  role: z.enum(['user', 'assistant']),
+  content: z.string().max(MAX_MESSAGE_LENGTH),
+});
+
+const requestSchema = z.object({
+  agentType: z.enum(['voice', 'designer', 'instructor', 'sales', 'architect']),
+  userMessage: z.string().min(1, 'El mensaje no puede estar vacío').max(MAX_MESSAGE_LENGTH, `Máximo ${MAX_MESSAGE_LENGTH} caracteres`),
+  conversationHistory: z.array(messageSchema).max(MAX_HISTORY_MESSAGES),
+});
 
 interface Message {
   role: 'user' | 'assistant';
@@ -23,6 +41,7 @@ export const AgentChat: React.FC<AgentChatProps> = ({ agentType, agentName, plac
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [lastSubmitTime, setLastSubmitTime] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -38,12 +57,36 @@ export const AgentChat: React.FC<AgentChatProps> = ({ agentType, agentName, plac
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
-  const handleSubmit = async (e?: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!input.trim() || isLoading) return;
 
-    const userMessage: Message = { role: 'user', content: input };
-    setMessages(prev => [...prev, userMessage]);
+    // Throttle: prevent rapid submissions
+    const now = Date.now();
+    if (now - lastSubmitTime < THROTTLE_MS) {
+      toast.error('Por favor espera un momento antes de enviar otro mensaje');
+      return;
+    }
+    setLastSubmitTime(now);
+
+    // Trim conversation history to prevent unbounded growth
+    const trimmedHistory = messages.slice(-MAX_HISTORY_MESSAGES);
+
+    // Validate input before sending
+    const validationResult = requestSchema.safeParse({
+      agentType,
+      userMessage: input.trim(),
+      conversationHistory: trimmedHistory,
+    });
+
+    if (!validationResult.success) {
+      const error = validationResult.error.errors[0];
+      toast.error(error.message || 'Mensaje inválido');
+      return;
+    }
+
+    const userMessage: Message = { role: 'user', content: input.trim() };
+    setMessages(prev => [...prev.slice(-MAX_HISTORY_MESSAGES + 1), userMessage]);
     setInput('');
     setIsLoading(true);
 
@@ -56,11 +99,7 @@ export const AgentChat: React.FC<AgentChatProps> = ({ agentType, agentName, plac
           'Content-Type': 'application/json',
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({
-          agentType,
-          userMessage: input,
-          conversationHistory: messages,
-        }),
+        body: JSON.stringify(validationResult.data),
       });
 
       if (!response.ok) {
@@ -122,7 +161,7 @@ export const AgentChat: React.FC<AgentChatProps> = ({ agentType, agentName, plac
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [input, isLoading, lastSubmitTime, messages, agentType]);
 
   const clearChat = () => {
     setMessages([]);
@@ -195,19 +234,24 @@ export const AgentChat: React.FC<AgentChatProps> = ({ agentType, agentName, plac
       {/* Input */}
       <form onSubmit={handleSubmit} className="p-4 border-t border-border">
         <div className="flex gap-2">
-          <Textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Escribe tu solicitud..."
-            className="min-h-[60px] max-h-[120px] resize-none"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSubmit();
-              }
-            }}
-          />
-          <Button type="submit" disabled={isLoading || !input.trim()} className="self-end">
+          <div className="flex-1 relative">
+            <Textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value.slice(0, MAX_MESSAGE_LENGTH))}
+              placeholder="Escribe tu solicitud..."
+              className="min-h-[60px] max-h-[120px] resize-none pr-16"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit();
+                }
+              }}
+            />
+            <span className={`absolute bottom-2 right-2 text-xs ${input.length > MAX_MESSAGE_LENGTH * 0.9 ? 'text-destructive' : 'text-muted-foreground'}`}>
+              {input.length}/{MAX_MESSAGE_LENGTH}
+            </span>
+          </div>
+          <Button type="submit" disabled={isLoading || !input.trim() || input.length > MAX_MESSAGE_LENGTH} className="self-end">
             {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </Button>
         </div>
