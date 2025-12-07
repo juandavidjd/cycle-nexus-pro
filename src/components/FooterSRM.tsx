@@ -9,7 +9,7 @@ interface FooterSRMProps {
 
 export function FooterSRM({ className }: FooterSRMProps) {
   return (
-    <footer className={cn("bg-steel-900 border-t border-steel-700 mt-auto", className)}>
+    <footer className={cn("border-t border-steel-700/50 mt-auto backdrop-blur-lg", className)}>
       <div className="container mx-auto px-4 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* Brand */}
