@@ -48,7 +48,7 @@ const Index = () => {
             className="absolute inset-0 transition-opacity duration-1000"
             style={{
               backgroundImage: `url(${img})`,
-              backgroundSize: '85%',
+              backgroundSize: '70%',
               backgroundPosition: 'center center',
               backgroundRepeat: 'no-repeat',
               opacity: index === currentImageIndex ? 1 : 0,
