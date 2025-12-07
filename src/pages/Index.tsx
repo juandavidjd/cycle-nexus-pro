@@ -40,23 +40,23 @@ const Index = () => {
     <div className="min-h-screen flex flex-col bg-background">
       <NavigationHeader />
 
-      {/* Fixed mural carousel background - expanded to fill screen */}
-      <div className="fixed inset-0 z-0 overflow-hidden">
+      {/* Fixed mural carousel background - zoomed out to show full art */}
+      <div className="fixed inset-0 z-0 overflow-hidden bg-black">
         {carouselImages.map((img, index) => (
           <div
             key={index}
             className="absolute inset-0 transition-opacity duration-1000"
             style={{
               backgroundImage: `url(${img})`,
-              backgroundSize: 'cover',
+              backgroundSize: '85%',
               backgroundPosition: 'center center',
               backgroundRepeat: 'no-repeat',
               opacity: index === currentImageIndex ? 1 : 0,
             }}
           />
         ))}
-        {/* Dark overlay for readability - reduced opacity to appreciate art */}
-        <div className="absolute inset-0 bg-background/40" />
+        {/* Dark overlay for readability */}
+        <div className="absolute inset-0 bg-background/50" />
       </div>
 
       {/* Main scrollable content */}
