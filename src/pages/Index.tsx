@@ -41,15 +41,15 @@ const Index = () => {
       <NavigationHeader />
 
       {/* Fixed mural carousel background */}
-      <div className="fixed inset-0 z-0 overflow-hidden">
+      <div className="fixed inset-x-0 top-0 h-[70vh] z-0 overflow-hidden">
         {carouselImages.map((img, index) => (
           <div
             key={index}
             className="absolute inset-0 transition-opacity duration-1000"
             style={{
               backgroundImage: `url(${img})`,
-              backgroundSize: '95%',
-              backgroundPosition: 'center',
+              backgroundSize: '100% auto',
+              backgroundPosition: 'center top',
               backgroundRepeat: 'no-repeat',
               opacity: index === currentImageIndex ? 1 : 0,
             }}
