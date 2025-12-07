@@ -8,7 +8,6 @@ import { SRMIntelligentProcessor } from '@/components/intelligent/SRMIntelligent
 import { SRMTechnicalChat } from '@/components/intelligent/SRMTechnicalChat';
 import { SRMPipelineVisual } from '@/components/intelligent/SRMPipelineVisual';
 import { SRMAgentsSuite } from '@/components/agents/SRMAgentsSuite';
-import muralBg from '@/assets/srm-mural-bg.png';
 
 const Intelligent = () => {
   const [activeTab, setActiveTab] = useState('processor');
@@ -26,19 +25,10 @@ const Intelligent = () => {
       <NavigationHeader />
 
       {/* Hero Section */}
-      <section className="relative pt-32 pb-20 overflow-hidden bg-black">
-        {/* Background Mural */}
-        <div 
-          className="absolute inset-0"
-          style={{
-            backgroundImage: `url(${muralBg})`,
-            backgroundSize: '55%',
-            backgroundPosition: 'center center',
-            backgroundRepeat: 'no-repeat',
-          }}
-        />
-        {/* Dark Overlay */}
-        <div className="absolute inset-0 bg-background/50" />
+      <section className="relative pt-32 pb-20 overflow-hidden">
+        {/* Background Effects */}
+        <div className="absolute inset-0 dynamic-lines" />
+        <div className="absolute inset-0 diagonal-stripes animate-diagonal-slide" />
         
         {/* Glowing orbs */}
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
