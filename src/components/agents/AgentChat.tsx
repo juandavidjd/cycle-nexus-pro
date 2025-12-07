@@ -1,10 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Loader2, Copy, Check, RotateCcw } from 'lucide-react';
+import { Send, Loader2, Copy, Check, RotateCcw, LogIn } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { z } from 'zod';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 
 // Validation constants
 const MAX_MESSAGE_LENGTH = 4000;
@@ -37,6 +40,7 @@ interface AgentChatProps {
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/srm-agents`;
 
 export const AgentChat: React.FC<AgentChatProps> = ({ agentType, agentName, placeholder }) => {
+  const { user, session, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -59,7 +63,7 @@ export const AgentChat: React.FC<AgentChatProps> = ({ agentType, agentName, plac
 
   const handleSubmit = useCallback(async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || !session) return;
 
     // Throttle: prevent rapid submissions
     const now = Date.now();
@@ -97,7 +101,7 @@ export const AgentChat: React.FC<AgentChatProps> = ({ agentType, agentName, plac
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify(validationResult.data),
       });
@@ -161,12 +165,31 @@ export const AgentChat: React.FC<AgentChatProps> = ({ agentType, agentName, plac
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, lastSubmitTime, messages, agentType]);
+  }, [input, isLoading, lastSubmitTime, messages, agentType, session]);
 
   const clearChat = () => {
     setMessages([]);
     toast.success('Conversación reiniciada');
   };
+
+  // Show auth required message if not logged in
+  if (!authLoading && !user) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[600px] bg-background border border-border rounded-lg p-8 text-center">
+        <LogIn className="w-12 h-12 text-muted-foreground mb-4" />
+        <h3 className="font-semibold text-foreground text-lg mb-2">Inicia sesión para usar los agentes</h3>
+        <p className="text-muted-foreground mb-6 max-w-md">
+          Los agentes de IA de SRM requieren autenticación para proteger el acceso y garantizar un uso responsable.
+        </p>
+        <Link to="/auth">
+          <Button className="gap-2">
+            <LogIn className="w-4 h-4" />
+            Iniciar Sesión
+          </Button>
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-[600px] bg-background border border-border rounded-lg overflow-hidden">
