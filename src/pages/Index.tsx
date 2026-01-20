@@ -61,27 +61,27 @@ const Index = () => {
       {/* Main scrollable content */}
       <div className="relative z-10 flex-1">
         {/* Hero Section */}
-        <section className="relative pt-32 pb-24 overflow-hidden">
-          <div className="container mx-auto px-4 relative z-10">
+        <section className="relative pt-28 md:pt-36 pb-20 md:pb-28 overflow-hidden">
+          <div className="container mx-auto px-6 md:px-4 relative z-10">
             <div className="max-w-4xl mx-auto text-center">
               {/* Title */}
-              <h1 className="font-display font-extrabold text-4xl md:text-6xl text-foreground mb-6 animate-fade-up">
-                <span className="text-primary glow-text-red">Tecnología</span>
-                {" + "}
-                <span className="text-secondary glow-text-blue">Catálogo Unificado</span>
-                {" + "}
+              <h1 className="font-display font-extrabold text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-foreground mb-8 leading-tight">
+                <span className="text-primary">Tecnología</span>
+                <span className="text-muted-foreground font-bold"> + </span>
+                <span className="text-secondary">Catálogo Unificado</span>
+                <span className="text-muted-foreground font-bold"> + </span>
                 <br className="hidden md:block" />
                 <span className="text-foreground">Conocimiento Técnico</span>
               </h1>
 
               {/* Subclaim */}
-              <p className="font-subtitle text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto mb-12 leading-relaxed animate-fade-up-delay-2">
+              <p className="font-subtitle text-lg sm:text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto mb-10 md:mb-14 leading-relaxed">
                 <span className="text-primary font-semibold">Lógica de inventarios</span> para{" "}
                 <span className="text-secondary font-semibold">ventas 360°</span>
               </p>
 
               {/* CTA Buttons */}
-              <div className="flex flex-wrap justify-center gap-4 animate-fade-up-delay-3">
+              <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
                 <SRMButton to="/catalogo" variant="primary" size="lg">
                   Catálogo SRM
                   <ChevronRight className="w-5 h-5" />
@@ -96,18 +96,18 @@ const Index = () => {
         </section>
 
         {/* Features Section */}
-        <section className="relative py-24 z-10">
-          <div className="container mx-auto px-4">
-            <div className="text-center mb-16">
-              <h2 className="font-display font-extrabold text-3xl md:text-4xl text-foreground mb-4">
+        <section className="relative py-16 md:py-24 z-10">
+          <div className="container mx-auto px-6 md:px-4">
+            <div className="text-center mb-12 md:mb-16">
+              <h2 className="font-display font-bold text-2xl sm:text-3xl md:text-4xl text-foreground mb-4">
                 Ecosistema <span className="text-primary">Unificado</span>
               </h2>
-              <p className="font-body text-muted-foreground max-w-2xl mx-auto">
+              <p className="font-body text-muted-foreground max-w-xl mx-auto text-sm md:text-base leading-relaxed">
                 Conectamos fabricantes, importadores, distribuidores y talleres en una plataforma técnica integrada.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
               <FeatureCard
                 icon={Factory}
                 title="Fabricantes"
@@ -133,12 +133,12 @@ const Index = () => {
         </section>
 
         {/* Stats Section */}
-        <section className="relative py-24 z-10">
-          <div className="container mx-auto px-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+        <section className="relative py-12 md:py-20 z-10">
+          <div className="container mx-auto px-6 md:px-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
               <StatItem value="9+" label="Clientes Activos" color="primary" />
               <StatItem value="360°" label="Lógica de Inventarios" color="secondary" />
-              <StatItem value="∞" label="Fichas y Terminología Técnica" color="primary" />
+              <StatItem value="∞" label="Fichas Técnicas" color="primary" />
               <StatItem value="∞" label="Productos Integrados" color="secondary" />
             </div>
           </div>
@@ -148,13 +148,13 @@ const Index = () => {
         <ChatUploader />
 
         {/* CTA Section */}
-        <section className="relative py-24">
-          <div className="container mx-auto px-4">
-            <div className="max-w-3xl mx-auto text-center">
-              <h2 className="font-display font-extrabold text-3xl md:text-4xl text-foreground mb-6">
+        <section className="relative py-16 md:py-24">
+          <div className="container mx-auto px-6 md:px-4">
+            <div className="max-w-2xl mx-auto text-center">
+              <h2 className="font-display font-bold text-2xl sm:text-3xl md:text-4xl text-foreground mb-5">
                 Explora el <span className="text-primary">Catálogo SRM</span>
               </h2>
-              <p className="font-body text-muted-foreground mb-8">
+              <p className="font-body text-muted-foreground mb-8 text-sm md:text-base leading-relaxed">
                 Accede a fichas técnicas, catálogos de productos y conexiones directas con tiendas oficiales.
               </p>
               <SRMButton to="/catalogo" variant="primary" size="lg">
@@ -179,12 +179,12 @@ interface FeatureCardProps {
 
 function FeatureCard({ icon: Icon, title, description }: FeatureCardProps) {
   return (
-    <div className="card-industrial rounded-xl p-6 hover-lift text-center">
-      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center mx-auto mb-4">
-        <Icon className="w-7 h-7 text-primary" />
+    <div className="card-industrial rounded-xl p-5 md:p-6 text-center">
+      <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-primary/10 flex items-center justify-center mx-auto mb-4">
+        <Icon className="w-5 h-5 md:w-6 md:h-6 text-primary" />
       </div>
-      <h3 className="font-display font-bold text-lg text-foreground mb-2">{title}</h3>
-      <p className="font-body text-muted-foreground text-sm">{description}</p>
+      <h3 className="font-display font-semibold text-base md:text-lg text-foreground mb-2">{title}</h3>
+      <p className="font-body text-muted-foreground text-sm leading-relaxed">{description}</p>
     </div>
   );
 }
@@ -196,14 +196,14 @@ interface StatItemProps {
 }
 
 function StatItem({ value, label, color }: StatItemProps) {
-  const colorClass = color === "primary" ? "text-primary glow-text-red" : "text-secondary glow-text-blue";
+  const colorClass = color === "primary" ? "text-primary" : "text-secondary";
   
   return (
-    <div className="text-center">
-      <div className={`font-display font-extrabold text-4xl md:text-5xl mb-2 ${colorClass}`}>
+    <div className="text-center py-2">
+      <div className={`font-display font-bold text-3xl sm:text-4xl md:text-5xl mb-1 ${colorClass}`}>
         {value}
       </div>
-      <div className="font-body text-muted-foreground text-sm">{label}</div>
+      <div className="font-body text-muted-foreground text-xs sm:text-sm">{label}</div>
     </div>
   );
 }
