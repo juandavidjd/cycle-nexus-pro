@@ -53,7 +53,7 @@ export function FooterSRM({ className }: FooterSRMProps) {
         {/* Bottom Bar */}
         <div className="border-t border-steel-700 pt-6">
           <p className="text-center text-xs text-muted-foreground">
-            © 2025 SRM — Somos Repuestos Motos. Todos los derechos reservados.
+            © 2026 SRM — Somos Repuestos Motos. Todos los derechos reservados.
           </p>
         </div>
       </div>
