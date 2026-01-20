@@ -10,71 +10,51 @@ interface FooterSRMProps {
 export function FooterSRM({ className }: FooterSRMProps) {
   return (
     <footer className={cn("bg-steel-900 border-t border-steel-700 mt-auto", className)}>
-      <div className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <div className="container mx-auto px-6 md:px-4 py-8 md:py-10">
+        {/* Main Footer Content */}
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-8 mb-8">
           {/* Brand */}
-          <div className="md:col-span-2">
-            <Link to="/" className="inline-flex items-center gap-3 mb-4">
-              <SRMLogo className="h-12 w-12" />
-              <span className="font-title font-extrabold text-foreground text-xl">SRM</span>
+          <div className="flex-shrink-0">
+            <Link to="/" className="inline-flex items-center gap-2 mb-3">
+              <SRMLogo className="h-8 w-8" />
+              <span className="font-display font-bold text-foreground text-lg">SRM</span>
             </Link>
-            <p className="font-body text-muted-foreground max-w-md">
+            <p className="font-body text-muted-foreground text-sm max-w-xs leading-relaxed">
               Tecnología + Catálogo Unificado + Conocimiento Técnico para la Industria de Motocicletas.
-              Lógica de inventarios para ventas 360°.
             </p>
           </div>
 
-          {/* Quick Links */}
-          <div>
-            <h4 className="font-display font-bold text-foreground mb-4">
-              Enlaces Rápidos
-            </h4>
-            <ul className="space-y-2">
-              <li>
-                <Link to="/" className="font-body text-muted-foreground hover:text-primary transition-colors">
-                  Inicio
-                </Link>
-              </li>
-              <li>
-                <Link to="/catalogo" className="font-body text-muted-foreground hover:text-primary transition-colors">
-                  Catálogo SRM
-                </Link>
-              </li>
-              <li>
-                <Link to="/clientes" className="font-body text-muted-foreground hover:text-primary transition-colors">
-                  Clientes
-                </Link>
-              </li>
-            </ul>
+          {/* Links */}
+          <div className="flex flex-wrap gap-6 md:gap-8">
+            <Link to="/" className="font-body text-sm text-muted-foreground hover:text-primary transition-colors">
+              Inicio
+            </Link>
+            <Link to="/catalogo" className="font-body text-sm text-muted-foreground hover:text-primary transition-colors">
+              Catálogo
+            </Link>
+            <Link to="/clientes" className="font-body text-sm text-muted-foreground hover:text-primary transition-colors">
+              Clientes
+            </Link>
           </div>
 
           {/* Contact */}
-          <div>
-            <h4 className="font-display font-bold text-foreground mb-4">
-              Contacto
-            </h4>
-            <ul className="space-y-3">
-              <li className="flex items-center gap-2 font-body text-muted-foreground">
-                <Mail className="w-4 h-4 text-primary" />
-                <span>info@somosrepuestosmotos.com</span>
-              </li>
-              <li className="flex items-center gap-2 font-body text-muted-foreground">
-                <Phone className="w-4 h-4 text-primary" />
-                <span>+57 300 000 0000</span>
-              </li>
-              <li className="flex items-center gap-2 font-body text-muted-foreground">
-                <MapPin className="w-4 h-4 text-primary" />
-                <span>Colombia</span>
-              </li>
-            </ul>
+          <div className="flex flex-col gap-2 text-sm">
+            <a href="mailto:info@somosrepuestosmotos.com" className="flex items-center gap-2 font-body text-muted-foreground hover:text-primary transition-colors">
+              <Mail className="w-4 h-4 text-primary flex-shrink-0" />
+              <span>info@somosrepuestosmotos.com</span>
+            </a>
+            <div className="flex items-center gap-2 font-body text-muted-foreground">
+              <MapPin className="w-4 h-4 text-primary flex-shrink-0" />
+              <span>Colombia</span>
+            </div>
           </div>
         </div>
 
         {/* Bottom Bar */}
-        <div className="divider-gradient my-8" />
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-sm font-body text-muted-foreground">
-          <p>© 2025 SRM — Somos Repuestos Motos. Todos los derechos reservados.</p>
-          <p className="text-steel-500">Lógica de Inventarios 360°</p>
+        <div className="border-t border-steel-700 pt-6">
+          <p className="text-center text-xs text-muted-foreground">
+            © 2025 SRM — Somos Repuestos Motos. Todos los derechos reservados.
+          </p>
         </div>
       </div>
     </footer>
