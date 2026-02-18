@@ -5,7 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { SRMPipelineVisual } from './SRMPipelineVisual';
-import { SRM360Viewer, mockProduct360, Product360Data } from './SRM360Viewer';
+import { SRM360Viewer, type Product360Data } from './SRM360Viewer';
+import odiApi, { type ODIProduct } from '@/lib/odi-api';
 
 interface UploadedFile {
   id: string;
@@ -13,58 +14,6 @@ interface UploadedFile {
   type: string;
   size: number;
 }
-
-interface ProcessedProduct {
-  codigo: string;
-  nombreOriginal: string;
-  nombreTecnico: string;
-  categoriaSRM: string;
-  compatibilidad: string;
-  imagenes: number;
-}
-
-const mockProcessedProducts: ProcessedProduct[] = [
-  {
-    codigo: 'SRM-TRN-001',
-    nombreOriginal: 'KIT ARRASTRE 428 120',
-    nombreTecnico: 'Kit de Arrastre 428H-120L',
-    categoriaSRM: 'Transmisión > Kits',
-    compatibilidad: 'Honda CBF 150, Yamaha YBR 125',
-    imagenes: 3,
-  },
-  {
-    codigo: 'SRM-FRN-002',
-    nombreOriginal: 'PASTILLA FRENO DEL',
-    nombreTecnico: 'Pastillas de Freno Delanteras Semi-Metálicas',
-    categoriaSRM: 'Frenos > Pastillas',
-    compatibilidad: 'Universal 125-200cc',
-    imagenes: 2,
-  },
-  {
-    codigo: 'SRM-ELE-003',
-    nombreOriginal: 'BOBINA ENCENDIDO',
-    nombreTecnico: 'Bobina de Encendido CDI 12V',
-    categoriaSRM: 'Eléctrico > Encendido',
-    compatibilidad: 'Bajaj Pulsar, Discover',
-    imagenes: 1,
-  },
-  {
-    codigo: 'SRM-MOT-004',
-    nombreOriginal: 'FILTRO ACEITE',
-    nombreTecnico: 'Filtro de Aceite Motor HF-134',
-    categoriaSRM: 'Motor > Filtración',
-    compatibilidad: 'Suzuki GN 125, EN 125',
-    imagenes: 2,
-  },
-  {
-    codigo: 'SRM-SUS-005',
-    nombreOriginal: 'AMORT TRAS',
-    nombreTecnico: 'Amortiguador Trasero Gas 340mm',
-    categoriaSRM: 'Suspensión > Amortiguadores',
-    compatibilidad: 'Honda Wave, Biz',
-    imagenes: 4,
-  },
-];
 
 const getFileIcon = (type: string) => {
   if (type.includes('spreadsheet') || type.includes('excel') || type.includes('csv')) {
@@ -88,10 +37,10 @@ export const SRMIntelligentProcessor = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
-  const [processedProducts, setProcessedProducts] = useState<ProcessedProduct[]>([]);
+  const [processedProducts, setProcessedProducts] = useState<ODIProduct[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product360Data | null>(null);
   const [isViewer360Open, setIsViewer360Open] = useState(false);
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -107,7 +56,7 @@ export const SRMIntelligentProcessor = () => {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
+
     const droppedFiles = Array.from(e.dataTransfer.files);
     const newFiles: UploadedFile[] = droppedFiles.map((file) => ({
       id: `${Date.now()}-${file.name}`,
@@ -115,7 +64,7 @@ export const SRMIntelligentProcessor = () => {
       type: file.type,
       size: file.size,
     }));
-    
+
     setFiles((prev) => [...prev, ...newFiles]);
   }, []);
 
@@ -147,26 +96,38 @@ export const SRMIntelligentProcessor = () => {
 
   const handleProcess = () => {
     if (files.length === 0 && !url.trim()) return;
-    
+
     setIsProcessing(true);
     setIsComplete(false);
     setProcessedProducts([]);
   };
 
-  const handlePipelineComplete = () => {
+  const handlePipelineComplete = async () => {
+    try {
+      const searchTerms = files.map(f => f.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ')).join(' ');
+      const query = searchTerms || url || 'repuestos moto';
+      const results = await odiApi.searchProducts(query, 10);
+      setProcessedProducts(results.products);
+    } catch {
+      setProcessedProducts([]);
+    }
     setIsProcessing(false);
     setIsComplete(true);
-    setProcessedProducts(mockProcessedProducts);
   };
 
-  const handleView360 = (product: ProcessedProduct) => {
-    // In real implementation, fetch actual product data
-    setSelectedProduct({
-      ...mockProduct360,
-      technicalName: product.nombreTecnico,
-      originalName: product.nombreOriginal,
-      srmCode: product.codigo,
-    });
+  const handleView360 = async (product: ODIProduct) => {
+    try {
+      const data = await odiApi.getProduct360(product.sku);
+      setSelectedProduct(data as Product360Data);
+    } catch {
+      setSelectedProduct({
+        technicalName: product.nombre,
+        srmCode: product.sku,
+        category: product.categoria,
+        proveedor: product.proveedor,
+        precio_cop: product.precio_cop,
+      });
+    }
     setIsViewer360Open(true);
   };
 
@@ -199,19 +160,19 @@ export const SRMIntelligentProcessor = () => {
             multiple
             accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg,.zip,.doc,.docx,.txt"
           />
-          
+
           <div className="flex flex-col items-center text-center">
             <div className="w-16 h-16 rounded-full bg-steel-700 flex items-center justify-center mb-4">
               <Upload className="w-8 h-8 text-primary" />
             </div>
             <h3 className="font-subtitle font-semibold text-foreground mb-2">
-              Arrastra y suelta archivos aquí
+              Arrastra y suelta archivos aqui
             </h3>
             <p className="text-sm text-muted-foreground mb-4">
               o haz clic para seleccionar
             </p>
             <div className="flex flex-wrap justify-center gap-2">
-              {['Excel', 'CSV', 'PDF', 'Imágenes', 'ZIP', 'Word', 'TXT'].map((format) => (
+              {['Excel', 'CSV', 'PDF', 'Imagenes', 'ZIP', 'Word', 'TXT'].map((format) => (
                 <Badge key={format} variant="outline" className="text-xs">
                   {format}
                 </Badge>
@@ -279,7 +240,7 @@ export const SRMIntelligentProcessor = () => {
             className="flex-1 bg-primary hover:bg-primary/90"
           >
             <Play className="w-4 h-4 mr-2" />
-            Procesar Catálogo
+            Procesar Catalogo
           </Button>
           <Button
             onClick={handleClear}
@@ -309,10 +270,10 @@ export const SRMIntelligentProcessor = () => {
           <div className="space-y-4 animate-fade-up">
             <div className="flex items-center justify-between">
               <h4 className="font-subtitle font-semibold text-foreground">
-                Productos Procesados ({processedProducts.length})
+                Productos Encontrados ({processedProducts.length})
               </h4>
               <Badge className="bg-green-500/20 text-green-400 border-green-500/50">
-                ✓ Procesamiento completado
+                Datos reales ODI
               </Badge>
             </div>
 
@@ -320,39 +281,33 @@ export const SRMIntelligentProcessor = () => {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-steel-800/50 border-steel-700">
-                    <TableHead className="text-muted-foreground">Código</TableHead>
-                    <TableHead className="text-muted-foreground">Nombre Original</TableHead>
-                    <TableHead className="text-muted-foreground">Nombre Técnico SRM</TableHead>
-                    <TableHead className="text-muted-foreground">Categoría</TableHead>
-                    <TableHead className="text-muted-foreground">Compatibilidad</TableHead>
-                    <TableHead className="text-muted-foreground text-center">Imgs</TableHead>
-                    <TableHead className="text-muted-foreground text-right">Acción</TableHead>
+                    <TableHead className="text-muted-foreground">SKU</TableHead>
+                    <TableHead className="text-muted-foreground">Nombre</TableHead>
+                    <TableHead className="text-muted-foreground">Categoria</TableHead>
+                    <TableHead className="text-muted-foreground">Proveedor</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Precio</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Accion</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {processedProducts.map((product) => (
-                    <TableRow key={product.codigo} className="border-steel-700 hover:bg-steel-800/30">
+                    <TableRow key={product.sku} className="border-steel-700 hover:bg-steel-800/30">
                       <TableCell className="font-mono text-xs text-primary">
-                        {product.codigo}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {product.nombreOriginal}
+                        {product.sku}
                       </TableCell>
                       <TableCell className="text-sm font-medium text-foreground">
-                        {product.nombreTecnico}
+                        {product.nombre}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs">
-                          {product.categoriaSRM}
+                          {product.categoria}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground max-w-[150px] truncate">
-                        {product.compatibilidad}
+                      <TableCell className="text-xs text-muted-foreground">
+                        {product.proveedor}
                       </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="secondary" className="text-xs">
-                          {product.imagenes}
-                        </Badge>
+                      <TableCell className="text-right text-sm font-medium text-foreground">
+                        ${(product.precio_cop || 0).toLocaleString('es-CO')}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
@@ -362,7 +317,7 @@ export const SRMIntelligentProcessor = () => {
                           className="text-secondary hover:text-secondary hover:bg-secondary/10"
                         >
                           <Eye className="w-4 h-4 mr-1" />
-                          Ficha 360°
+                          360
                         </Button>
                       </TableCell>
                     </TableRow>

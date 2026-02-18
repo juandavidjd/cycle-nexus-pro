@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { SRM360Viewer, mockProduct360 } from './SRM360Viewer';
+import { SRM360Viewer, type Product360Data } from './SRM360Viewer';
+import odiApi from '@/lib/odi-api';
 
 interface ChatMessage {
   id: string;
@@ -19,63 +20,22 @@ interface ChatMessage {
   actions?: {
     type: 'view360' | 'standardize' | 'fitment';
     label: string;
+    sku?: string;
   }[];
 }
-
-const simulatedResponses: Record<string, string> = {
-  default: `He analizado tu consulta. Basándome en la terminología técnica SRM y nuestra base de conocimiento unificada, aquí tienes la información:
-
-**Estandarización SRM:**
-- Nombre técnico sugerido: Kit de Arrastre 428H-120L
-- Categoría: Transmisión > Kits de Arrastre
-- Código SRM: SRM-TRN-KIT-428H120
-
-**Fitment detectado:**
-Honda CBF 150 (2015-2023), Yamaha YBR 125 (2016-2022)
-
-¿Deseas ver la ficha técnica 360° completa?`,
-  standardize: `✅ **Estandarización completada**
-
-**Nombre original:** Kit Cadena Reforzado 428
-**Nombre técnico SRM:** Kit de Arrastre 428H-120L
-
-**Correcciones aplicadas:**
-- "Cadena" → "Arrastre" (terminología técnica)
-- Especificación de paso y eslabones añadida
-- Formato unificado según taxonomía SRM`,
-  fitment: `🔧 **Análisis de Fitment SRM**
-
-**Compatibilidad confirmada:**
-- Honda: CBF 150, CB 190R, XR 150L
-- Yamaha: YBR 125, FZ 150, Szr 150
-- Suzuki: GN 125, EN 125
-- Bajaj: Pulsar 150, Discover 125
-
-**Años:** 2015-2023
-
-**Nota técnica:** Verificar tensión de cadena según manual del fabricante (25-30mm de deflexión).`,
-  diagnose: `🔍 **Diagnóstico Técnico SRM**
-
-Basándome en la información proporcionada, el desgaste prematuro puede deberse a:
-
-1. **Tensión incorrecta** - Verificar deflexión de 25-30mm
-2. **Lubricación inadecuada** - Aplicar lubricante cada 500km
-3. **Desalineación** - Revisar alineación de rueda trasera
-
-**Recomendación:** Reemplazar kit completo (cadena + piñones) para evitar desgaste disparejo.`,
-};
 
 export const SRMTechnicalChat = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: '1',
       role: 'assistant',
-      content: `¡Hola! Soy el asistente técnico SRM. Puedo ayudarte con:
+      content: `Conectado al ecosistema ODI — 33,326 productos | 15 proveedores.
 
-• **Estandarización** de nombres de repuestos
-• **Fitment** y compatibilidad de piezas
-• **Diagnóstico técnico** de componentes
-• **Generación de fichas 360°**
+Puedo ayudarte con:
+- Buscar repuestos por nombre, SKU o descripcion
+- Compatibilidad y fitment de piezas
+- Fichas tecnicas 360
+- Informacion de proveedores
 
 Escribe tu consulta o carga un archivo para comenzar.`,
       timestamp: new Date(),
@@ -83,7 +43,9 @@ Escribe tu consulta o carga un archivo para comenzar.`,
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [sessionId, setSessionId] = useState<string | undefined>();
   const [isViewer360Open, setIsViewer360Open] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product360Data | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -94,7 +56,7 @@ Escribe tu consulta o carga un archivo para comenzar.`,
   }, [messages]);
 
   const handleSend = async () => {
-    if (!input.trim() && !isLoading) return;
+    if (!input.trim() || isLoading) return;
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -104,39 +66,48 @@ Escribe tu consulta o carga un archivo para comenzar.`,
     };
 
     setMessages((prev) => [...prev, userMessage]);
+    const query = input;
     setInput('');
     setIsLoading(true);
 
-    // Simulate response delay
-    await new Promise((resolve) => setTimeout(resolve, 1500 + Math.random() * 1000));
+    try {
+      const data = await odiApi.chat(query, sessionId);
+      if (data.session_id) setSessionId(data.session_id);
 
-    // Determine response type based on input
-    let responseKey = 'default';
-    const lowerInput = input.toLowerCase();
-    if (lowerInput.includes('estandarizar') || lowerInput.includes('nombre')) {
-      responseKey = 'standardize';
-    } else if (lowerInput.includes('fitment') || lowerInput.includes('compatible')) {
-      responseKey = 'fitment';
-    } else if (lowerInput.includes('diagnóstico') || lowerInput.includes('problema') || lowerInput.includes('desgaste')) {
-      responseKey = 'diagnose';
+      const actions: ChatMessage['actions'] = [];
+      if (data.productos && data.productos.length > 0) {
+        data.productos.slice(0, 5).forEach((p) => {
+          actions.push({
+            type: 'view360',
+            label: `${p.nombre?.slice(0, 30) || p.sku} — $${(p.precio_cop || 0).toLocaleString('es-CO')}`,
+            sku: p.sku,
+          });
+        });
+      }
+
+      const assistantMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: data.response || 'Sin respuesta del servidor.',
+        timestamp: new Date(),
+        actions: actions.length > 0 ? actions : undefined,
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
+    } catch (err) {
+      const assistantMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: 'Error conectando con ODI. Verifica tu conexion e intenta de nuevo.',
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
     }
 
-    const assistantMessage: ChatMessage = {
-      id: (Date.now() + 1).toString(),
-      role: 'assistant',
-      content: simulatedResponses[responseKey],
-      timestamp: new Date(),
-      actions: [
-        { type: 'view360', label: 'Ver Ficha 360°' },
-        { type: 'standardize', label: 'Estandarizar' },
-      ],
-    };
-
-    setMessages((prev) => [...prev, assistantMessage]);
     setIsLoading(false);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files?.length) return;
 
@@ -157,38 +128,49 @@ Escribe tu consulta o carga un archivo para comenzar.`,
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
-    // Simulate processing
-    setTimeout(() => {
+    try {
+      const searchTerm = file.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+      const results = await odiApi.searchProducts(searchTerm, 5);
+
+      const actions: ChatMessage['actions'] = results.products.slice(0, 3).map((p) => ({
+        type: 'view360' as const,
+        label: `${p.nombre?.slice(0, 30) || p.sku} — $${(p.precio_cop || 0).toLocaleString('es-CO')}`,
+        sku: p.sku,
+      }));
+
       const assistantMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `📁 **Archivo recibido:** ${file.name}
-
-Procesando contenido...
-
-✅ **Análisis completado:**
-- Tipo: ${file.type || 'documento'}
-- Se detectaron 47 productos
-- 12 requieren estandarización
-- 35 ya tienen formato SRM
-
-¿Deseas procesar estos productos con el pipeline SRM completo?`,
+        content: `Archivo recibido: ${file.name}\n\nBusqueda en ecosistema ODI: ${results.total} productos encontrados para "${searchTerm}".`,
         timestamp: new Date(),
-        actions: [
-          { type: 'view360', label: 'Ver Ficha 360°' },
-        ],
+        actions: actions.length > 0 ? actions : undefined,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
-      setIsLoading(false);
-    }, 2000);
+    } catch {
+      const assistantMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: `Archivo recibido: ${file.name}\n\nNo se pudo conectar con ODI para buscar productos relacionados.`,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
+    }
 
+    setIsLoading(false);
     e.target.value = '';
   };
 
-  const handleAction = (action: { type: string; label: string }) => {
-    if (action.type === 'view360') {
-      setIsViewer360Open(true);
+  const handleAction = async (action: { type: string; label: string; sku?: string }) => {
+    if (action.type === 'view360' && action.sku) {
+      try {
+        const data = await odiApi.getProduct360(action.sku);
+        setSelectedProduct(data as Product360Data);
+        setIsViewer360Open(true);
+      } catch {
+        setSelectedProduct({ technicalName: action.label, srmCode: action.sku });
+        setIsViewer360Open(true);
+      }
     }
   };
 
@@ -209,11 +191,11 @@ Procesando contenido...
           </div>
           <div>
             <h3 className="font-subtitle font-semibold text-foreground">SRM Technical Chat</h3>
-            <p className="text-xs text-muted-foreground">Asistente técnico inteligente</p>
+            <p className="text-xs text-muted-foreground">Conectado a ODI — datos reales</p>
           </div>
           <Badge className="ml-auto bg-green-500/20 text-green-400 border-green-500/50">
             <span className="w-2 h-2 rounded-full bg-green-400 mr-1.5 animate-pulse" />
-            En línea
+            ODI Live
           </Badge>
         </div>
 
@@ -241,8 +223,8 @@ Procesando contenido...
                 <div
                   className={`
                     max-w-[80%] rounded-2xl px-4 py-3
-                    ${message.role === 'user' 
-                      ? 'bg-primary/20 border border-primary/30' 
+                    ${message.role === 'user'
+                      ? 'bg-primary/20 border border-primary/30'
                       : 'bg-steel-800 border border-steel-700'}
                   `}
                 >
@@ -263,7 +245,7 @@ Procesando contenido...
                   <div className="text-sm text-foreground whitespace-pre-wrap prose prose-invert prose-sm max-w-none">
                     {message.content.split('\n').map((line, i) => (
                       <p key={i} className="mb-1 last:mb-0">
-                        {line.split('**').map((part, j) => 
+                        {line.split('**').map((part, j) =>
                           j % 2 === 1 ? <strong key={j}>{part}</strong> : part
                         )}
                       </p>
@@ -322,7 +304,7 @@ Procesando contenido...
               className="hidden"
               accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg,.zip,.doc,.docx,.txt"
             />
-            
+
             <Button
               size="icon"
               variant="ghost"
@@ -336,7 +318,7 @@ Procesando contenido...
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Escribe tu consulta técnica..."
+              placeholder="Busca repuestos, compatibilidad, fichas tecnicas..."
               className="flex-1 bg-steel-900 border-steel-700"
               disabled={isLoading}
             />
@@ -362,7 +344,7 @@ Procesando contenido...
             </Badge>
             <Badge variant="outline" className="text-xs cursor-pointer hover:bg-steel-700">
               <Image className="w-3 h-3 mr-1" />
-              Imágenes
+              Imagenes
             </Badge>
             <Badge variant="outline" className="text-xs cursor-pointer hover:bg-steel-700">
               <Link2 className="w-3 h-3 mr-1" />
@@ -375,7 +357,7 @@ Procesando contenido...
       <SRM360Viewer
         isOpen={isViewer360Open}
         onClose={() => setIsViewer360Open(false)}
-        product={mockProduct360}
+        product={selectedProduct}
       />
     </>
   );

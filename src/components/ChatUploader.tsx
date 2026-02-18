@@ -3,6 +3,7 @@ import { Upload, FileText, Image, FileSpreadsheet, Link2, Send, X, CheckCircle, 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import odiApi from '@/lib/odi-api';
 
 interface UploadedFile {
   name: string;
@@ -12,12 +13,12 @@ interface UploadedFile {
 }
 
 const ACCEPTED_TYPES = [
-  ".xlsx", ".xls", ".csv",  // Spreadsheets
-  ".pdf",                    // PDF
-  ".jpg", ".jpeg", ".png", ".gif", ".webp",  // Images
-  ".zip", ".rar",            // Archives
-  ".doc", ".docx",           // Word
-  ".txt"                     // Text
+  ".xlsx", ".xls", ".csv",
+  ".pdf",
+  ".jpg", ".jpeg", ".png", ".gif", ".webp",
+  ".zip", ".rar",
+  ".doc", ".docx",
+  ".txt"
 ];
 
 const getFileIcon = (type: string) => {
@@ -54,23 +55,22 @@ export function ChatUploader() {
       size: file.size,
       status: "uploading"
     };
-    
+
     setFiles(prev => [...prev, newFile]);
     setStatusMessage("Procesando archivo...");
 
-    // Simulate processing
     setTimeout(() => {
-      setFiles(prev => prev.map(f => 
+      setFiles(prev => prev.map(f =>
         f.name === file.name ? { ...f, status: "processing" } : f
       ));
       setStatusMessage("Validando formato...");
     }, 800);
 
     setTimeout(() => {
-      setFiles(prev => prev.map(f => 
+      setFiles(prev => prev.map(f =>
         f.name === file.name ? { ...f, status: "complete" } : f
       ));
-      setStatusMessage("Enviado a la lógica de inventarios SRM");
+      setStatusMessage("Archivo listo para busqueda");
       toast.success(`${file.name} procesado correctamente`);
     }, 2000);
 
@@ -82,7 +82,7 @@ export function ChatUploader() {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
+
     const droppedFiles = Array.from(e.dataTransfer.files);
     droppedFiles.forEach(processFile);
   }, []);
@@ -95,35 +95,32 @@ export function ChatUploader() {
 
   const handleUrlSubmit = () => {
     if (!url.trim()) return;
-    
-    setStatusMessage("Analizando URL para scraping...");
+
+    setStatusMessage("Analizando URL...");
     toast.info(`Procesando: ${url}`);
-    
-    setTimeout(() => {
-      setStatusMessage("Enviado a la lógica de inventarios SRM");
-      setUrl("");
-      toast.success("URL enviada para procesamiento");
-    }, 2000);
 
     setTimeout(() => {
       setStatusMessage(null);
-    }, 4000);
+      setUrl("");
+      toast.success("URL registrada");
+    }, 2000);
   };
 
   const removeFile = (fileName: string) => {
     setFiles(prev => prev.filter(f => f.name !== fileName));
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!message.trim() && files.length === 0) return;
-    
-    // Placeholder API call
-    console.log("Sending to POST https://api.srm-adsi.com/intake", {
-      message,
-      files: files.map(f => f.name)
-    });
-    
-    toast.success("Mensaje enviado al sistema SRM");
+    const searchTerm = message || files.map(f => f.name.replace(/\.[^.]+$/, '')).join(' ');
+    setStatusMessage("Buscando en ecosistema ODI...");
+    try {
+      const results = await odiApi.searchProducts(searchTerm, 5);
+      toast.success(`${results.total} productos encontrados en el ecosistema ODI`);
+    } catch {
+      toast.error("Error conectando con ODI. Intenta de nuevo.");
+    }
+    setStatusMessage(null);
     setMessage("");
   };
 
@@ -131,20 +128,18 @@ export function ChatUploader() {
     <section className="relative py-24 z-10">
       <div className="container mx-auto px-4">
         <div className="max-w-4xl mx-auto">
-          {/* Header */}
           <div className="text-center mb-12">
             <h2 className="font-display font-extrabold text-3xl md:text-4xl text-foreground mb-4">
-              <span className="text-primary">SRM Inteligente</span> — Carga tu Catálogo
+              <span className="text-primary">SRM Inteligente</span> — Carga tu Catalogo
             </h2>
             <p className="text-muted-foreground font-subtitle text-lg">
-              Carga tus catálogos y SRM los estandariza automáticamente
+              Carga tus catalogos y SRM los estandariza automaticamente
             </p>
             <p className="text-steel-400 text-sm mt-2">
               Compatible con fabricantes, importadores, distribuidores y talleres
             </p>
           </div>
 
-          {/* Dropzone Area */}
           <div
             className={`dropzone ${isDragging ? 'dragging' : ''} cursor-pointer mb-6`}
             onDragOver={handleDragOver}
@@ -160,23 +155,22 @@ export function ChatUploader() {
               onChange={handleFileInput}
               className="hidden"
             />
-            
+
             <div className="flex flex-col items-center justify-center gap-4 py-8">
               <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
                 <Upload className="w-8 h-8 text-primary" />
               </div>
               <div className="text-center">
                 <p className="font-subtitle font-semibold text-foreground text-lg">
-                  Arrastra y suelta archivos aquí
+                  Arrastra y suelta archivos aqui
                 </p>
                 <p className="text-muted-foreground text-sm mt-1">
-                  Excel, CSV, PDF, Imágenes, ZIP, Word, TXT
+                  Excel, CSV, PDF, Imagenes, ZIP, Word, TXT
                 </p>
               </div>
             </div>
           </div>
 
-          {/* URL Input */}
           <div className="flex gap-3 mb-6">
             <div className="flex-1 relative">
               <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -188,7 +182,7 @@ export function ChatUploader() {
                 className="pl-10 bg-steel-800 border-steel-700 focus:border-secondary"
               />
             </div>
-            <Button 
+            <Button
               onClick={handleUrlSubmit}
               variant="outline"
               className="border-secondary text-secondary hover:bg-secondary hover:text-secondary-foreground"
@@ -197,7 +191,6 @@ export function ChatUploader() {
             </Button>
           </div>
 
-          {/* Status Message */}
           {statusMessage && (
             <div className="flex items-center gap-3 p-4 rounded-lg bg-steel-800/80 border border-steel-700 mb-6 animate-fade-up">
               <Loader2 className="w-5 h-5 text-secondary animate-spin" />
@@ -205,7 +198,6 @@ export function ChatUploader() {
             </div>
           )}
 
-          {/* Files List */}
           {files.length > 0 && (
             <div className="space-y-3 mb-6">
               {files.map((file) => (
@@ -234,7 +226,6 @@ export function ChatUploader() {
             </div>
           )}
 
-          {/* Chat Input */}
           <div className="flex gap-3">
             <Input
               placeholder="Escribe instrucciones adicionales para el procesamiento..."
@@ -243,7 +234,7 @@ export function ChatUploader() {
               onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
               className="flex-1 bg-steel-800 border-steel-700 focus:border-primary"
             />
-            <Button 
+            <Button
               onClick={handleSendMessage}
               className="bg-primary hover:bg-primary/90 text-primary-foreground"
             >
@@ -251,9 +242,8 @@ export function ChatUploader() {
             </Button>
           </div>
 
-          {/* API Endpoint Info */}
           <p className="text-steel-500 text-xs text-center mt-4">
-            Endpoint: POST https://api.srm-adsi.com/intake
+            Conectado a ODI — 33,326 productos | 15 proveedores
           </p>
         </div>
       </div>

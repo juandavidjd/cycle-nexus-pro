@@ -1,83 +1,17 @@
 [
-  {
-    "id": "kaiqi",
-    "name": "Kaiqi",
-    "type": "Fabricante",
-    "logo": "/logos/kaiqi.png",
-    "palette": { "primary": "#0047FF", "accent": "#0A1133" },
-    "landing": "/kaiqi",
-    "shopify": "https://kaiqi.myshopify.com"
-  },
-  {
-    "id": "japan",
-    "name": "Japan",
-    "type": "Fabricante",
-    "logo": "/logos/japan.png",
-    "palette": { "primary": "#E3001B", "accent": "#1A1A1A" },
-    "landing": "/japan",
-    "shopify": "https://repuestosjapan.myshopify.com"
-  },
-  {
-    "id": "yokomar",
-    "name": "Yokomar",
-    "type": "Distribuidor",
-    "logo": "/logos/yokomar.png",
-    "palette": { "primary": "#FFC400", "accent": "#000000" },
-    "landing": "/yokomar",
-    "shopify": "https://yokomar-colombia.myshopify.com"
-  },
-  {
-    "id": "duna",
-    "name": "Duna",
-    "type": "Fabricante",
-    "logo": "/logos/duna.png",
-    "palette": { "primary": "#0077B6", "accent": "#023047" },
-    "landing": "/duna",
-    "shopify": "https://duna.myshopify.com"
-  },
-  {
-    "id": "bara",
-    "name": "Bara",
-    "type": "Importador",
-    "logo": "/logos/bara.png",
-    "palette": { "primary": "#D90429", "accent": "#2B2D42" },
-    "landing": "/bara",
-    "shopify": "https://bara-importaciones.myshopify.com"
-  },
-  {
-    "id": "vaisand",
-    "name": "Vaisand",
-    "type": "Distribuidor",
-    "logo": "/logos/vaisand.png",
-    "palette": { "primary": "#06D6A0", "accent": "#073B4C" },
-    "landing": "/vaisand",
-    "shopify": "https://vaisand.myshopify.com"
-  },
-  {
-    "id": "dfg",
-    "name": "DFG",
-    "type": "Importador",
-    "logo": "/logos/dfg.png",
-    "palette": { "primary": "#111111", "accent": "#666666" },
-    "landing": "/dfg",
-    "shopify": "https://dfg-parts.myshopify.com"
-  },
-  {
-    "id": "leo",
-    "name": "Leo",
-    "type": "Almacén",
-    "logo": "/logos/leo.png",
-    "palette": { "primary": "#FF6F00", "accent": "#212121" },
-    "landing": "/leo",
-    "shopify": "https://leo-motos.myshopify.com"
-  },
-  {
-    "id": "store",
-    "name": "Store",
-    "type": "Almacén",
-    "logo": "/logos/store.png",
-    "palette": { "primary": "#0096C7", "accent": "#1A1A1A" },
-    "landing": "/store",
-    "shopify": "https://store-motos.myshopify.com"
-  }
+  {"id":"bara","name":"Bara Importaciones","type":"Importador","logo":"/logos/bara.png","palette":{"primary":"#D90429","accent":"#2B2D42"},"landing":"/bara","shopify":"https://4jqcki-jq.myshopify.com"},
+  {"id":"yokomar","name":"Yokomar","type":"Importador","logo":"/logos/yokomar.png","palette":{"primary":"#FFC400","accent":"#000000"},"landing":"/yokomar","shopify":"https://u1zmhk-ts.myshopify.com"},
+  {"id":"kaiqi","name":"Kaiqi Parts","type":"Distribuidor","logo":"/logos/kaiqi.png","palette":{"primary":"#0047FF","accent":"#0A1133"},"landing":"/kaiqi","shopify":"https://u03tqc-0e.myshopify.com"},
+  {"id":"dfg","name":"DFG","type":"Importador","logo":"/logos/dfg.png","palette":{"primary":"#111111","accent":"#666666"},"landing":"/dfg","shopify":"https://0se1jt-q1.myshopify.com"},
+  {"id":"duna","name":"Duna","type":"Importador","logo":"/logos/duna.png","palette":{"primary":"#0077B6","accent":"#023047"},"landing":"/duna","shopify":"https://ygsfhq-fs.myshopify.com"},
+  {"id":"imbra","name":"Imbra","type":"Importador","logo":"/logos/imbra.png","palette":{"primary":"#6C63FF","accent":"#2D2B55"},"landing":"/imbra","shopify":"https://0i1mdf-gi.myshopify.com"},
+  {"id":"japan","name":"Japan","type":"Fabricante","logo":"/logos/japan.png","palette":{"primary":"#E3001B","accent":"#1A1A1A"},"landing":"/japan","shopify":"https://7cy1zd-qz.myshopify.com"},
+  {"id":"leo","name":"Leo","type":"Fabricante","logo":"/logos/leo.png","palette":{"primary":"#FF6F00","accent":"#212121"},"landing":"/leo","shopify":"https://h1hywg-pq.myshopify.com"},
+  {"id":"store","name":"Store","type":"Almacen","logo":"/logos/store.png","palette":{"primary":"#0096C7","accent":"#1A1A1A"},"landing":"/store","shopify":"https://0b6umv-11.myshopify.com"},
+  {"id":"vaisand","name":"Vaisand","type":"Distribuidor","logo":"/logos/vaisand.png","palette":{"primary":"#06D6A0","accent":"#073B4C"},"landing":"/vaisand","shopify":"https://z4fpdj-mz.myshopify.com"},
+  {"id":"armotos","name":"Armotos","type":"Distribuidor","logo":"/logos/armotos.png","palette":{"primary":"#FF4500","accent":"#1A1A1A"},"landing":"/armotos","shopify":"https://znxx5p-10.myshopify.com"},
+  {"id":"vitton","name":"Vitton","type":"Almacen","logo":"/logos/vitton.png","palette":{"primary":"#8B4513","accent":"#2F1B0E"},"landing":"/vitton","shopify":"https://hxjebc-it.myshopify.com"},
+  {"id":"mclmotos","name":"MclMotos","type":"Almacen","logo":"/logos/mclmotos.png","palette":{"primary":"#1E90FF","accent":"#0A1929"},"landing":"/mclmotos","shopify":"https://v023qz-8x.myshopify.com"},
+  {"id":"cbi","name":"CBI","type":"Importador","logo":"/logos/cbi.png","palette":{"primary":"#228B22","accent":"#0A2E0A"},"landing":"/cbi","shopify":"https://yrf6hp-f6.myshopify.com"},
+  {"id":"oh_importaciones","name":"OH Importaciones","type":"Importador","logo":"/logos/oh.png","palette":{"primary":"#9C27B0","accent":"#4A0072"},"landing":"/oh_importaciones","shopify":"https://6fbakq-sj.myshopify.com"}
 ]

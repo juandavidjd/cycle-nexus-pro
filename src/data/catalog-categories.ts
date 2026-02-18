@@ -47,7 +47,8 @@ export const CATALOG_CATEGORIES: CatalogCategory[] = [
     ],
     clients: [
       { id: "japan", name: "Japan", logo: "/logos/japan.png", shopify: "https://repuestosjapan.myshopify.com", landing: "/japan" },
-      { id: "leo", name: "Leo", logo: "/logos/leo.png", shopify: "https://leo-motos.myshopify.com", landing: "/leo" }
+      { id: "leo", name: "Leo", logo: "/logos/leo.png", shopify: "https://leo-motos.myshopify.com", landing: "/leo" },
+      { id: "duna", name: "Duna", logo: "/logos/duna.png", shopify: "https://ygsfhq-fs.myshopify.com", landing: "/duna" }
     ],
     gradient: "from-red-600/20 to-orange-600/20"
   },
@@ -80,7 +81,10 @@ export const CATALOG_CATEGORIES: CatalogCategory[] = [
       { id: "dfg", name: "DFG", logo: "/logos/dfg.png", shopify: "https://dfg-parts.myshopify.com", landing: "/dfg" },
       { id: "duna", name: "Duna", logo: "/logos/duna.png", shopify: "https://duna.myshopify.com", landing: "/duna" },
       { id: "yokomar", name: "Yokomar", logo: "/logos/yokomar.png", shopify: "https://yokomar-colombia.myshopify.com", landing: "/yokomar" },
-      { id: "vaisand", name: "Vaisand", logo: "/logos/vaisand.png", shopify: "https://vaisand.myshopify.com", landing: "/vaisand" }
+      { id: "vaisand", name: "Vaisand", logo: "/logos/vaisand.png", shopify: "https://vaisand.myshopify.com", landing: "/vaisand" },
+      { id: "imbra", name: "Imbra", logo: "/logos/imbra.png", shopify: "https://0i1mdf-gi.myshopify.com", landing: "/imbra" },
+      { id: "cbi", name: "CBI", logo: "/logos/cbi.png", shopify: "https://yrf6hp-f6.myshopify.com", landing: "/cbi" },
+      { id: "oh_importaciones", name: "OH Importaciones", logo: "/logos/oh.png", shopify: "https://6fbakq-sj.myshopify.com", landing: "/oh_importaciones" }
     ],
     gradient: "from-blue-600/20 to-cyan-600/20"
   },
@@ -110,7 +114,8 @@ export const CATALOG_CATEGORIES: CatalogCategory[] = [
     ],
     clients: [
       { id: "kaiqi", name: "Kaiqi Parts", role: "Distribuidor Nacional", logo: "/logos/kaiqi.png", shopify: "https://kaiqi.myshopify.com", landing: "/kaiqi" },
-      { id: "store", name: "Store", logo: "/logos/store.png", shopify: "https://store-motos.myshopify.com", landing: "/store" }
+      { id: "store", name: "Store", logo: "/logos/store.png", shopify: "https://store-motos.myshopify.com", landing: "/store" },
+      { id: "armotos", name: "Armotos", logo: "/logos/armotos.png", shopify: "https://znxx5p-10.myshopify.com", landing: "/armotos" }
     ],
     gradient: "from-green-600/20 to-emerald-600/20"
   },
@@ -140,7 +145,9 @@ export const CATALOG_CATEGORIES: CatalogCategory[] = [
     ],
     clients: [
       { id: "kaiqi-almacen", name: "Kaiqi Parts", role: "Casa China Motos", logo: "/logos/kaiqi.png", shopify: "https://kaiqi.myshopify.com", landing: "/kaiqi" },
-      { id: "store-almacen", name: "Store", logo: "/logos/store.png", shopify: "https://store-motos.myshopify.com", landing: "/store" }
+      { id: "store-almacen", name: "Store", logo: "/logos/store.png", shopify: "https://store-motos.myshopify.com", landing: "/store" },
+      { id: "vitton", name: "Vitton", logo: "/logos/vitton.png", shopify: "https://hxjebc-it.myshopify.com", landing: "/vitton" },
+      { id: "mclmotos", name: "MclMotos", logo: "/logos/mclmotos.png", shopify: "https://v023qz-8x.myshopify.com", landing: "/mclmotos" }
     ],
     gradient: "from-purple-600/20 to-pink-600/20"
   },
