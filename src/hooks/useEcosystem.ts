@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import odiApi, { type ODIEcosystem } from '@/lib/odi-api';
+import odiApi, { type ODIEcosystem } from '@/lib/odiApi';
 
 export function useEcosystem() {
   const [ecosystem, setEcosystem] = useState<ODIEcosystem | null>(null);

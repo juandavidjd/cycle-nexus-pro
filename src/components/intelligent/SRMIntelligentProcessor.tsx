@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { SRMPipelineVisual } from './SRMPipelineVisual';
 import { SRM360Viewer, type Product360Data } from './SRM360Viewer';
-import odiApi, { type ODIProduct } from '@/lib/odi-api';
+import odiApi, { type ODIProductLegacy as ODIProduct } from '@/lib/odiApi';
 
 interface UploadedFile {
   id: string;

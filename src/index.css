@@ -293,3 +293,27 @@
     background-size: auto 100%;
   }
 }
+
+/* ═══════════════════════════════════════════════════
+   ODI Skin Engine — data-attribute driven CSS
+   ═══════════════════════════════════════════════════ */
+
+:root[data-industry="motos"]        { --odi-accent: #49c2ff; }
+:root[data-industry="salud_dental"] { --odi-accent: #2ef08a; }
+:root[data-mode="commerce"]         { --odi-mode: #2ef08a; }
+:root[data-mode="care"]             { --odi-mode: #ff6b8a; }
+:root[data-mode="build"]            { --odi-mode: #ff9f43; }
+:root[data-mode="diagnose"]         { --odi-mode: #49c2ff; }
+:root[data-mode="optimize"]         { --odi-mode: #49c2ff; }
+:root[data-mode="empower"]          { --odi-mode: #ff9f43; }
+:root[data-mode="learn"]            { --odi-mode: #c4a0ff; }
+:root[data-guardian="verde"]        { --odi-guardian: #2ef08a; }
+:root[data-guardian="naranja"]      { --odi-guardian: #ff9f43; }
+:root[data-guardian="rojo"]         { --odi-guardian: #ff4d4d; }
+
+/* Orb breathing animation */
+@keyframes orbBreathe {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  40% { transform: scale(1.05); filter: brightness(1.12); }
+  70% { transform: scale(0.98); filter: brightness(0.95); }
+}

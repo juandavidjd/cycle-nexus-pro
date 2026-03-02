@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Client } from "@/types/client";
 import { SRMButton } from "./SRMButton";
 import { ArrowLeft, Store, Package, FileText, View, Loader2 } from "lucide-react";
-import odiApi, { type ODIStoreSummary } from '@/lib/odi-api';
+import odiApi, { type ODIStoreSummary } from '@/lib/odiApi';
 
 interface ClientLandingProps {
   client: Client;

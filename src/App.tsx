@@ -4,6 +4,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
+import { SkinProvider, useSkin } from "@/context/SkinProvider";
+
+// ─── SRM Pages (somosrepuestosmotos.com) ───
 import Index from "./pages/Index";
 import Catalogo from "./pages/Catalogo";
 import Clientes from "./pages/Clientes";
@@ -14,7 +17,48 @@ import AcademiaModulo from "./pages/AcademiaModulo";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
+// ─── Habitat (liveodi.com) ───
+import HabitatLayout from "./components/habitat/HabitatLayout";
+
 const queryClient = new QueryClient();
+
+// ─── Layout Router: hostname → layout ───
+
+function AppContent() {
+  const skin = useSkin();
+
+  switch (skin.layout) {
+    case "habitat":
+      return <HabitatLayout />;
+    case "srm":
+      return <SRMRoutes />;
+    // Futuro:
+    // case "adsi": return <ADSILayout />;
+    // case "catrmu": return <CATRMULayout />;
+    default:
+      return <HabitatLayout />;
+  }
+}
+
+// ─── SRM Routes (cycle-nexus-pro actual) ───
+
+function SRMRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<Index />} />
+      <Route path="/catalogo" element={<Catalogo />} />
+      <Route path="/clientes" element={<Clientes />} />
+      <Route path="/intelligent" element={<Intelligent />} />
+      <Route path="/academia" element={<Academia />} />
+      <Route path="/academia/modulo/:id" element={<AcademiaModulo />} />
+      <Route path="/auth" element={<Auth />} />
+      <Route path="/:clientId" element={<ClientPage />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+}
+
+// ─── App Root ───
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -22,20 +66,11 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/catalogo" element={<Catalogo />} />
-            <Route path="/clientes" element={<Clientes />} />
-            <Route path="/intelligent" element={<Intelligent />} />
-            <Route path="/academia" element={<Academia />} />
-            <Route path="/academia/modulo/:id" element={<AcademiaModulo />} />
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/:clientId" element={<ClientPage />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
+        <SkinProvider>
+          <BrowserRouter>
+            <AppContent />
+          </BrowserRouter>
+        </SkinProvider>
       </TooltipProvider>
     </AuthProvider>
   </QueryClientProvider>
