@@ -226,3 +226,141 @@ const odiApi = {
 };
 
 export default odiApi;
+
+// ══════════════════════════════════════════════════════════
+// ODI MANAGER — API Functions
+// Consume api.liveodi.com/manager/*
+// ══════════════════════════════════════════════════════════
+
+const MANAGER_BASE = `${ODI_API}/manager`;
+
+export interface ManagerStore {
+  store_id: string;
+  display_name: string;
+  shop: string;
+  industry: string;
+  active: number;
+  draft: number;
+  total: number;
+  grade: string;
+  status: string;
+  source_type: string;
+  has_token: boolean;
+}
+
+export interface ManagerService {
+  name: string;
+  label: string;
+  port: number;
+  status: string;
+  code: number;
+}
+
+export interface ManagerDashboard {
+  organism: string;
+  version: string;
+  generated_at: string;
+  stores_total: number;
+  products_active: number;
+  products_total: number;
+  stores: ManagerStore[];
+  services: Record<string, ManagerService>;
+  flows_total: number;
+  flows_readiness: Record<string, number>;
+  organisms_total: number;
+  organisms_readiness: Record<string, number>;
+}
+
+export interface ManagerFlowCategory {
+  id: string;
+  label: string;
+  icon: string;
+  color: string;
+  description: string;
+  flows_count: number;
+}
+
+export interface ManagerFlow {
+  flow_id: string;
+  label: string;
+  icon: string;
+  category: string;
+  description: string;
+  return_visit: boolean;
+  steps_count: number;
+  return_steps_count: number;
+  backend_services: string[];
+  organism: string;
+  readiness: string;
+}
+
+export interface ManagerFlowStep {
+  phase?: string;
+  role?: string;
+  voice?: string;
+  text?: string;
+  mode?: string;
+  detail?: string;
+  follow?: string;
+  system_action?: Record<string, unknown>;
+  products: Record<string, unknown>[];
+}
+
+export interface ManagerFlowDetail extends ManagerFlow {
+  steps: ManagerFlowStep[];
+  return_steps: ManagerFlowStep[];
+}
+
+export interface ManagerOrganism {
+  organism_id: string;
+  label: string;
+  icon: string;
+  description: string;
+  color: string;
+  services: string[];
+  flows: string[];
+  readiness: string;
+  services_count?: number;
+  flows_count?: number;
+}
+
+export interface ManagerStoreAudit {
+  store_id: string;
+  grade: string;
+  catalog: { total: number; active: number; draft: number; archived: number };
+  branding_ok: boolean;
+  has_images: boolean;
+  issues: string[];
+  generated_at: string;
+}
+
+async function managerFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${MANAGER_BASE}${path}`, options);
+  if (!res.ok) throw new Error(`Manager API ${res.status}: ${res.statusText}`);
+  return res.json();
+}
+
+export const managerApi = {
+  health: () => managerFetch<{ status: string }>('/health'),
+
+  dashboard: (refresh = false) =>
+    managerFetch<ManagerDashboard>(`/dashboard${refresh ? '?refresh=true' : ''}`),
+
+  categories: () =>
+    managerFetch<{ categories: ManagerFlowCategory[] }>('/categories').then(d => d.categories),
+
+  flows: (category?: string) =>
+    managerFetch<{ flows: ManagerFlow[] }>(category ? `/flows?category=${category}` : '/flows').then(d => d.flows),
+
+  flowDetail: (flowId: string) =>
+    managerFetch<ManagerFlowDetail>(`/flows/${flowId}`),
+
+  organisms: () =>
+    managerFetch<{ organisms: ManagerOrganism[]; readiness: Record<string, number> }>('/organisms'),
+
+  ecosystem: () =>
+    managerFetch<{ services: Record<string, ManagerService> }>('/ecosystem'),
+
+  auditStore: (storeId: string) =>
+    managerFetch<ManagerStoreAudit>(`/stores/${storeId}/audit`, { method: 'POST' }),
+};

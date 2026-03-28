@@ -16,6 +16,7 @@ import Academia from "./pages/Academia";
 import AcademiaModulo from "./pages/AcademiaModulo";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
+import Manager from "./pages/Manager";
 
 // ─── Habitat (liveodi.com) ───
 import HabitatLayout from "./components/habitat/HabitatLayout";
@@ -68,7 +69,10 @@ const App = () => (
         <Sonner />
         <SkinProvider>
           <BrowserRouter>
-            <AppContent />
+            <Routes>
+              <Route path="/manager" element={<Manager />} />
+              <Route path="*" element={<AppContent />} />
+            </Routes>
           </BrowserRouter>
         </SkinProvider>
       </TooltipProvider>
