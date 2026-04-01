@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Separator } from "@/components/ui/separator";
 import {
   ArrowLeft, Store, Workflow, Cpu,
-  Activity, Server, ChevronRight,
+  Activity, Server, ChevronRight, Shield,
 } from "lucide-react";
 import {
   managerApi,
@@ -298,6 +298,82 @@ function TabOrganismos() {
   );
 }
 
+// ── Tab: Guardian ──
+function TabGuardian() {
+  const [data, setData] = useState<Record<string, any> | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    managerApi.guardian()
+      .then(d => setData(d as Record<string, any>))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <p className="text-muted-foreground text-sm py-8 text-center">Cargando Guardian…</p>;
+  if (!data) return <p className="text-muted-foreground text-sm py-8 text-center">Sin datos</p>;
+
+  const eco = (data.ecosystem || {}) as Record<string, any>;
+  const stores = (data.stores || []) as Record<string, any>[];
+  const sColors: Record<string, string> = { verde: "bg-emerald-500", amarillo: "bg-yellow-500", naranja: "bg-orange-500", rojo: "bg-red-500", gris: "bg-muted" };
+  const sText: Record<string, string> = { verde: "text-emerald-400", amarillo: "text-yellow-400", naranja: "text-orange-400", rojo: "text-red-400", gris: "text-muted-foreground" };
+
+  return (
+    <div className="space-y-6">
+      <Card className="bg-card text-center py-6">
+        <CardContent className="space-y-3">
+          <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center ${sColors[eco.semaforo as string] || "bg-muted"}`}>
+            <span className="text-2xl font-extrabold text-white">{eco.health_index}</span>
+          </div>
+          <p className={`text-sm font-bold uppercase tracking-wide ${sText[eco.semaforo as string] || "text-muted-foreground"}`}>{eco.semaforo as string}</p>
+          <div className="flex justify-center gap-4 text-xs text-muted-foreground">
+            <span className="text-emerald-400">{eco.verde as number} verde</span>
+            <span className="text-yellow-400">{eco.amarillo as number} amarillo</span>
+            <span className="text-orange-400">{eco.naranja as number} naranja</span>
+            <span className="text-red-400">{eco.rojo as number} rojo</span>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: "Agent", val: (data.agent as Record<string, any>)?.status, ok: (data.agent as Record<string, any>)?.status === "alive" },
+          { label: "CES", val: `${(data.ces as Record<string, any>)?.status} (${(data.ces as Record<string, any>)?.principles_count || 0}p)`, ok: ["active", "live"].includes((data.ces as Record<string, any>)?.status) },
+          { label: "Radar", val: (data.radar as Record<string, any>)?.status, ok: (data.radar as Record<string, any>)?.status === "alive" },
+          { label: "Servicios", val: `${data.services_alive}/${data.services_total}`, ok: true },
+        ].map(s => (
+          <Card key={s.label} className="bg-card">
+            <CardContent className="p-4">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{s.label}</p>
+              <p className={`text-sm font-semibold ${s.ok ? "text-emerald-400" : "text-red-400"}`}>{String(s.val || "—").toUpperCase()}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card className="bg-card">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Tiendas por criticidad</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1">
+          {stores.map((s: Record<string, any>) => (
+            <div key={s.store_id as string} className="flex items-center gap-3 py-1.5 border-b border-border/50 last:border-0 text-sm">
+              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${sColors[s.semaforo as string] || "bg-muted"}`} />
+              <span className="font-semibold w-20">{(s.store_id as string).toUpperCase()}</span>
+              <Badge variant="outline" className={gradeColor(s.grade as string)}>{s.grade as string || "—"}</Badge>
+              <span className="text-muted-foreground text-xs ml-auto">{s.active as number} activos</span>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {data.nota_etica && (
+        <p className="text-[10px] text-muted-foreground italic text-center">{data.nota_etica as string}</p>
+      )}
+    </div>
+  );
+}
+
 // ── Detail Sheets ──
 function StoreAuditSheet({ storeId, open, onClose }: { storeId: string; open: boolean; onClose: () => void }) {
   const [audit, setAudit] = useState<ManagerStoreAudit | null>(null);
@@ -504,6 +580,9 @@ const Manager = () => {
             <TabsTrigger value="organismos" className="text-xs gap-1.5">
               <Cpu className="w-3.5 h-3.5" /> Organismos
             </TabsTrigger>
+            <TabsTrigger value="guardian" className="text-xs gap-1.5">
+              <Shield className="w-3.5 h-3.5" /> Guardian
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="tiendas">
@@ -517,6 +596,9 @@ const Manager = () => {
           </TabsContent>
           <TabsContent value="organismos">
             <TabOrganismos />
+          </TabsContent>
+          <TabsContent value="guardian">
+            <TabGuardian />
           </TabsContent>
         </Tabs>
       </div>
