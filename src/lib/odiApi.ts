@@ -363,4 +363,7 @@ export const managerApi = {
 
   auditStore: (storeId: string) =>
     managerFetch<ManagerStoreAudit>(`/stores/${storeId}/audit`, { method: 'POST' }),
+
+  guardian: () =>
+    managerFetch<Record<string, unknown>>('/guardian'),
 };
