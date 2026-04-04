@@ -322,7 +322,7 @@ function TabGuardian() {
   const sColors: Record<string, string> = { verde: "bg-emerald-500", amarillo: "bg-yellow-500", naranja: "bg-orange-500", rojo: "bg-red-500", gris: "bg-muted" };
   const sText: Record<string, string> = { verde: "text-emerald-400", amarillo: "text-yellow-400", naranja: "text-orange-400", rojo: "text-red-400", gris: "text-muted-foreground" };
   const sBar: Record<string, string> = { verde: "bg-emerald-500", amarillo: "bg-yellow-500", naranja: "bg-orange-500", rojo: "bg-red-500", gris: "bg-muted" };
-  const frontLabels: Record<string, string> = { stores: "Stores", services: "Services", agent: "Agent", ces: "CES", radar: "Radar" };
+  const frontLabels: Record<string, string> = { stores: "Stores", services: "Services", agent: "Agent", whatsapp: "WhatsApp", ces: "CES", radar: "Radar" };
 
   return (
     <div className="space-y-6">
@@ -352,7 +352,7 @@ function TabGuardian() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {["stores", "services", "agent", "ces", "radar"].map(name => {
+          {["stores", "services", "agent", "whatsapp", "ces", "radar"].map(name => {
             const f = fronts[name] || {};
             const pct = Math.round((f.health || 0) * 100);
             const sem = f.semaphore as string || "gris";
