@@ -15,13 +15,9 @@ interface AgentEvent {
 	system_action?: { type?: string; status?: string; [k: string]: unknown };
 }
 
-interface Manifest {
-	capabilities: Record<string, boolean>;
-	services: Record<string, { port: number; status: string }>;
-	context: Record<string, string>;
-}
-
 type Phase = "idle" | "connecting" | "registering" | "live" | "offline";
+type InputMode = "text" | "voice";
+type SideTab = "flows" | "manifest" | "stats";
 
 // ── Constants ──
 const WS_URLS = [
@@ -29,9 +25,24 @@ const WS_URLS = [
 	"wss://api.liveodi.com/ws/vivir",
 	"ws://localhost:8765",
 ];
+const AGENT_API = "https://ws.liveodi.com/agent";
+const CHAT_URL = "https://api.liveodi.com/odi/chat";
+const SPEAK_URL = "https://api.liveodi.com/odi/chat/speak";
 const HEARTBEAT_MS = 12_000;
 const RECONNECT_MS = 4_000;
 const MAX_EVENTS = 60;
+
+const SOURCE_COLORS: Record<string, string> = {
+	agent: "#49c2ff", chat: "#3af08f", pipeline: "#ffcc00",
+	test: "#c084fc", radar: "#f97316", webops: "#06b6d4",
+	voice: "#ec4899", flow: "#a78bfa",
+	whatsapp: "#25D366", manager: "#ff9800",
+	turismo: "#ff7043", lead: "#26a69a",
+};
+
+const SVC_COLOR: Record<string, string> = {
+	alive: "#3af08f", degraded: "#ffcc00", unreachable: "#ff4444",
+};
 
 // ── Helpers ──
 function getDeviceId(): string {
@@ -57,23 +68,37 @@ function timeAgo(iso: string): string {
 	return `${Math.floor(s / 3600)}h`;
 }
 
-const SOURCE_COLORS: Record<string, string> = {
-	agent: "#49c2ff",
-	chat: "#3af08f",
-	pipeline: "#ffcc00",
-	test: "#c084fc",
-	radar: "#f97316",
-};
-
 // ── Component ──
 export function AgentHabitat() {
 	const [phase, setPhase] = useState<Phase>("idle");
 	const [events, setEvents] = useState<AgentEvent[]>([]);
-	const [manifest, setManifest] = useState<Manifest | null>(null);
-	const [showManifest, setShowManifest] = useState(false);
 	const [returnVisit] = useState(isReturn);
 	const [heartbeats, setHeartbeats] = useState(0);
 	const [wsUrlIdx, setWsUrlIdx] = useState(0);
+	const [inputMode, setInputMode] = useState<InputMode>("text");
+	const [chatInput, setChatInput] = useState("");
+	const [isSending, setIsSending] = useState(false);
+	const [showSidebar, setShowSidebar] = useState(false);
+	const [sideTab, setSideTab] = useState<SideTab>("flows");
+
+	// ── Live data from backend ──
+	const [liveManifest, setLiveManifest] = useState<any>(null);
+	const [flows, setFlows] = useState<any[]>([]);
+	const [categories, setCategories] = useState<any[]>([]);
+	const [stats, setStats] = useState<any>(null);
+
+	// ── Stores ──
+	const [stores, setStores] = useState<any[]>([]);
+
+	// ── Return card ──
+	const [returnContext, setReturnContext] = useState<any>(null);
+	const [showReturnCard, setShowReturnCard] = useState(false);
+
+	// ── Flow player ──
+	const [activeFlowId, setActiveFlowId] = useState<string | null>(null);
+	const [activeFlowMeta, setActiveFlowMeta] = useState<any>(null);
+	const [activeFlowSeq, setActiveFlowSeq] = useState<any[]>([]);
+	const [activeFlowStep, setActiveFlowStep] = useState(0);
 
 	const wsRef = useRef<WebSocket | null>(null);
 	const hbRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -86,13 +111,13 @@ export function AgentHabitat() {
 	const deviceRef = useRef("ssr");
 	const mountedRef = useRef(true);
 	const urlIdxRef = useRef(0);
+	const inputRef = useRef<HTMLInputElement>(null);
 
 	// ── pushEvent ──
 	const pushEvent = useCallback((ev: AgentEvent) => {
 		setEvents((prev) => [ev, ...prev].slice(0, MAX_EVENTS));
 	}, []);
 
-	// ── cleanup ──
 	const cleanup = useCallback(() => {
 		if (hbRef.current) clearInterval(hbRef.current);
 		if (reconRef.current) clearTimeout(reconRef.current);
@@ -100,120 +125,201 @@ export function AgentHabitat() {
 		reconRef.current = null;
 	}, []);
 
-	// ── connect ──
+	// === TTS ===
+	const audioRef = useRef<HTMLAudioElement | null>(null);
+	const [isSpeaking, setIsSpeaking] = useState(false);
+
+	const speakText = useCallback(async (text: string, voice: string = "ramona") => {
+		if (isSpeaking || !text) return;
+		const truncated = text.length > 500 ? text.slice(0, 497) + "..." : text;
+		try {
+			setIsSpeaking(true);
+			const resp = await fetch(SPEAK_URL, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ text: truncated, voice }),
+			});
+			if (resp.ok) {
+				const blob = await resp.blob();
+				const url = URL.createObjectURL(blob);
+				if (audioRef.current) { audioRef.current.pause(); URL.revokeObjectURL(audioRef.current.src); }
+				const audio = new Audio(url);
+				audioRef.current = audio;
+				audio.onended = () => { setIsSpeaking(false); URL.revokeObjectURL(url); };
+				audio.onerror = () => setIsSpeaking(false);
+				await audio.play();
+			} else { setIsSpeaking(false); }
+		} catch { setIsSpeaking(false); }
+	}, [isSpeaking]);
+
+	// === STT ===
+	const recognitionRef = useRef<any>(null);
+	const [isListening, setIsListening] = useState(false);
+
+	const handleSend = useCallback(async (text?: string) => {
+		const msg = (text || chatInput).trim();
+		if (!msg || isSending) return;
+		setChatInput("");
+		setIsSending(true);
+		pushEvent({ event_id: `user_${Date.now()}`, ts: new Date().toISOString(), source: "agent", type: "user_message", payload: { text: msg } });
+		try {
+			const resp = await fetch(CHAT_URL, {
+				method: "POST", headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ message: msg, mode: "commerce", session_id: sessionRef.current }),
+			});
+			if (resp.ok) {
+				const data = await resp.json();
+				const responseText = data.response || "";
+				const voice = data.voice || "ramona";
+				pushEvent({ event_id: `chat_${Date.now()}`, ts: new Date().toISOString(), source: "chat", type: "message", voice, mode: data.mode || "commerce", payload: { text: responseText } });
+				if (inputMode === "voice" && responseText) speakText(responseText, voice);
+			}
+		} catch {
+			pushEvent({ event_id: `err_${Date.now()}`, ts: new Date().toISOString(), source: "agent", type: "error", payload: { text: "No pude conectar con el chat" } });
+		}
+		setIsSending(false);
+	}, [chatInput, isSending, inputMode, pushEvent, speakText]);
+
+	const startListening = useCallback(() => {
+		const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+		if (!SR) return;
+		const recognition = new SR();
+		recognition.lang = "es-CO"; recognition.continuous = false; recognition.interimResults = false;
+		recognition.onresult = (event: any) => { const t = event.results[0][0].transcript; if (t.trim()) handleSend(t.trim()); setIsListening(false); };
+		recognition.onerror = () => setIsListening(false);
+		recognition.onend = () => setIsListening(false);
+		recognitionRef.current = recognition; recognition.start(); setIsListening(true);
+	}, [handleSend]);
+
+	const stopListening = useCallback(() => { recognitionRef.current?.stop(); setIsListening(false); }, []);
+
+	// === Load live manifest ===
+	useEffect(() => {
+		const load = async () => {
+			try { const r = await fetch(`${AGENT_API}/manifest`); if (r.ok) setLiveManifest(await r.json()); } catch {}
+		};
+		load();
+		const iv = setInterval(load, 30000);
+		return () => clearInterval(iv);
+	}, []);
+
+	// === Load flows ===
+	useEffect(() => {
+		(async () => {
+			try {
+				const r = await fetch(`${AGENT_API}/flows`);
+				if (r.ok) { const d = await r.json(); setFlows(d.flows || []); setCategories(d.categories || []); }
+			} catch {}
+		})();
+	}, []);
+
+	// === Load stats ===
+	useEffect(() => {
+		const load = async () => { try { const r = await fetch(`${AGENT_API}/stats`); if (r.ok) setStats(await r.json()); } catch {} };
+		load();
+		const iv = setInterval(load, 60000);
+		return () => clearInterval(iv);
+	}, []);
+
+	// === Load stores ===
+	useEffect(() => {
+		const load = async () => {
+			try { const r = await fetch(`${AGENT_API}/stores`); if (r.ok) { const d = await r.json(); setStores(d.stores || []); } } catch {}
+		};
+		load();
+		const iv = setInterval(load, 60000);
+		return () => clearInterval(iv);
+	}, []);
+
+	// === Flow player ===
+	const startFlow = useCallback(async (flowId: string) => {
+		try {
+			const [seqR, flowR] = await Promise.all([
+				fetch(`${AGENT_API}/flows/${flowId}/sequence`),
+				fetch(`${AGENT_API}/flows/${flowId}`),
+			]);
+			if (!seqR.ok) return;
+			const seqData = await seqR.json();
+			const flowData = flowR.ok ? await flowR.json() : null;
+			setActiveFlowId(flowId);
+			setActiveFlowMeta(flowData);
+			setActiveFlowSeq(seqData.steps || []);
+			setActiveFlowStep(0);
+			fetch(`${AGENT_API}/flows/${flowId}/start`, {
+				method: "POST", headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ session_id: sessionRef.current }),
+			}).catch(() => {});
+		} catch {}
+	}, []);
+
+	const advanceFlow = useCallback(() => {
+		if (!activeFlowId || activeFlowStep >= activeFlowSeq.length - 1) {
+			setActiveFlowId(null); setActiveFlowSeq([]); setActiveFlowStep(0); setActiveFlowMeta(null);
+			return;
+		}
+		const next = activeFlowStep + 1;
+		setActiveFlowStep(next);
+		fetch(`${AGENT_API}/flows/${activeFlowId}/step`, {
+			method: "POST", headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ session_id: sessionRef.current }),
+		}).catch(() => {});
+		const step = activeFlowSeq[next];
+		if (step?.voice && inputMode === "voice") speakText(step.text, step.voice);
+	}, [activeFlowId, activeFlowStep, activeFlowSeq, inputMode, speakText]);
+
+	const closeFlow = useCallback(() => {
+		setActiveFlowId(null); setActiveFlowSeq([]); setActiveFlowStep(0); setActiveFlowMeta(null);
+	}, []);
+
+	// === WS connect ===
 	const connect = useCallback(() => {
 		cleanup();
 		if (!mountedRef.current) return;
-
 		const url = WS_URLS[urlIdxRef.current];
 		setPhase("connecting");
-
 		const ws = new WebSocket(url);
 		wsRef.current = ws;
-
 		ws.onopen = () => {
 			if (!mountedRef.current) { ws.close(); return; }
-			setPhase("registering");
-			setWsUrlIdx(urlIdxRef.current);
-
+			setPhase("registering"); setWsUrlIdx(urlIdxRef.current);
 			ws.send(JSON.stringify({
-				type: "register",
-				device_id: deviceRef.current,
-				session_id: sessionRef.current,
-				device_info: {
-					platform: navigator.platform || "unknown",
-					language: navigator.language || "es",
-					user_agent: navigator.userAgent,
-					timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-					screen: {
-						width: window.screen?.width,
-						height: window.screen?.height,
-					},
-				},
+				type: "register", device_id: deviceRef.current, session_id: sessionRef.current,
+				device_info: { platform: navigator.platform || "unknown", language: navigator.language || "es", user_agent: navigator.userAgent, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, screen: { width: window.screen?.width, height: window.screen?.height } },
 			}));
-
-			// heartbeat
-			hbRef.current = setInterval(() => {
-				if (ws.readyState === WebSocket.OPEN) {
-					ws.send(JSON.stringify({ type: "heartbeat" }));
-				}
-			}, HEARTBEAT_MS);
+			hbRef.current = setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "heartbeat" })); }, HEARTBEAT_MS);
 		};
-
 		ws.onmessage = (e) => {
 			if (!mountedRef.current) return;
 			try {
 				const msg = JSON.parse(e.data);
-
-				if (msg.type === "manifest") {
-					setManifest(msg.manifest || null);
-					setPhase("live");
-					pushEvent({
-						event_id: msg.session_id || "manifest",
-						ts: msg.ts || new Date().toISOString(),
-						source: "agent",
-						type: "manifest",
-						payload: { text: "Manifest recibido" },
-						system_action: { type: "manifest", status: "Habitat conectado" },
+				if (msg.type === "manifest") { setPhase("live"); pushEvent({ event_id: msg.session_id || "manifest", ts: msg.ts || new Date().toISOString(), source: "agent", type: "manifest", payload: { text: "Manifest recibido" }, system_action: { type: "manifest", status: "Habitat conectado" } }); return; }
+				if (msg.type === "heartbeat_ack") { setHeartbeats((n) => n + 1); return; }
+				// Detect return_detected
+				if (msg.system_action?.type === "return_detected" || (msg.type === "state_change" && msg.payload?.resume)) {
+					const resume = msg.payload?.resume || msg.payload || {};
+					setReturnContext({
+						visit_count: resume.visit_count || msg.payload?.text?.match(/#(\d+)/)?.[1] || "?",
+						resume_text: resume.resume_text || msg.payload?.text || "Bienvenido de vuelta.",
+						identity_depth: resume.identity_depth || "anonymous",
+						incomplete_flows: resume.incomplete_flows || [],
+						last_flow: resume.last_flow,
+						last_step: resume.last_step,
 					});
-					return;
+					setShowReturnCard(true);
 				}
-
-				if (msg.type === "heartbeat_ack") {
-					setHeartbeats((n) => n + 1);
-					return;
-				}
-
-				// Any other message is an event
-				const ev: AgentEvent = {
-					event_id: msg.event_id || `ev_${Date.now()}`,
-					ts: msg.ts || new Date().toISOString(),
-					source: msg.source || "unknown",
-					type: msg.type || "event",
-					level: msg.level,
-					voice: msg.voice,
-					mode: msg.mode,
-					payload: msg.payload,
-					system_action: msg.system_action,
-				};
-				pushEvent(ev);
-			} catch { /* ignore malformed */ }
+				pushEvent({ event_id: msg.event_id || `ev_${Date.now()}`, ts: msg.ts || new Date().toISOString(), source: msg.source || "unknown", type: msg.type || "event", level: msg.level, voice: msg.voice, mode: msg.mode, payload: msg.payload, system_action: msg.system_action });
+			} catch {}
 		};
-
-		ws.onclose = () => {
-			if (!mountedRef.current) return;
-			cleanup();
-			setPhase("offline");
-
-			// try next URL on failure, cycle back
-			urlIdxRef.current = (urlIdxRef.current + 1) % WS_URLS.length;
-			reconRef.current = setTimeout(() => {
-				if (mountedRef.current) connect();
-			}, RECONNECT_MS);
-		};
-
-		ws.onerror = () => {
-			ws.close();
-		};
+		ws.onclose = () => { if (!mountedRef.current) return; cleanup(); setPhase("offline"); urlIdxRef.current = (urlIdxRef.current + 1) % WS_URLS.length; reconRef.current = setTimeout(() => { if (mountedRef.current) connect(); }, RECONNECT_MS); };
+		ws.onerror = () => { ws.close(); };
 	}, [cleanup, pushEvent]);
 
-	// ── lifecycle ──
 	useEffect(() => {
-		mountedRef.current = true;
-		deviceRef.current = getDeviceId();
-		connect();
-
-		return () => {
-			mountedRef.current = false;
-			cleanup();
-			if (wsRef.current) {
-				wsRef.current.close();
-				wsRef.current = null;
-			}
-		};
+		mountedRef.current = true; deviceRef.current = getDeviceId(); connect();
+		return () => { mountedRef.current = false; cleanup(); if (wsRef.current) { wsRef.current.close(); wsRef.current = null; } if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; } };
 	}, [connect, cleanup]);
 
-	// ── flame color by phase ──
+	// ── Phase styles ──
 	const flameGradient: Record<Phase, string> = {
 		idle: "radial-gradient(circle at 50% 35%, #666 0%, #444 50%, transparent 100%)",
 		connecting: "radial-gradient(circle at 50% 35%, #ffcc00 0%, #ff8800 50%, transparent 100%)",
@@ -221,42 +327,27 @@ export function AgentHabitat() {
 		live: "radial-gradient(circle at 50% 35%, #9be2ff 0%, #49c2ff 32%, #6f6dff 65%, rgba(111,109,255,0.1) 82%, transparent 100%)",
 		offline: "radial-gradient(circle at 50% 35%, #ff4444 0%, #cc0000 50%, transparent 100%)",
 	};
+	const flameShadow: Record<Phase, string> = { idle: "0 0 20px #44444488", connecting: "0 0 30px #ffcc0088", registering: "0 0 30px #ffcc0088", live: "0 0 38px #4ab8ffaa, inset 0 0 35px #b8d8ff70", offline: "0 0 30px #ff444488" };
+	const statusLabel: Record<Phase, string> = { idle: "Inactivo", connecting: "Conectando...", registering: "Registrando...", live: "Habitat vivo", offline: "Modo offline — reconectando..." };
+	const statusDot: Record<Phase, string> = { idle: "bg-[#444]", connecting: "bg-[#ffcc00] animate-pulse", registering: "bg-[#ffcc00] animate-pulse", live: "bg-[#3af08f] shadow-[0_0_12px_#3af08fcc] animate-pulse", offline: "bg-[#ff4444] animate-pulse" };
 
-	const flameShadow: Record<Phase, string> = {
-		idle: "0 0 20px #44444488",
-		connecting: "0 0 30px #ffcc0088",
-		registering: "0 0 30px #ffcc0088",
-		live: "0 0 38px #4ab8ffaa, inset 0 0 35px #b8d8ff70",
-		offline: "0 0 30px #ff444488",
-	};
-
-	const statusLabel: Record<Phase, string> = {
-		idle: "Inactivo",
-		connecting: "Conectando...",
-		registering: "Registrando...",
-		live: "Habitat vivo",
-		offline: "Modo offline — reconectando...",
-	};
-
-	const statusDot: Record<Phase, string> = {
-		idle: "bg-[#444]",
-		connecting: "bg-[#ffcc00] animate-pulse",
-		registering: "bg-[#ffcc00] animate-pulse",
-		live: "bg-[#3af08f] shadow-[0_0_12px_#3af08fcc] animate-pulse",
-		offline: "bg-[#ff4444] animate-pulse",
-	};
+	// Group flows by category
+	const flowsByCategory: Record<string, any[]> = {};
+	flows.forEach((f) => { if (!flowsByCategory[f.category]) flowsByCategory[f.category] = []; flowsByCategory[f.category].push(f); });
 
 	return (
 		<main className="min-h-screen bg-[#03070d] text-[#dbe7ff] font-sans">
-			<div className="max-w-[1100px] mx-auto min-h-screen px-4 py-5">
+			<div className="max-w-[1200px] mx-auto min-h-screen px-4 py-5">
 
 				{/* ── Header ── */}
 				<header className="flex items-center justify-between gap-3 mb-6">
 					<div className="flex items-center gap-3">
 						<span className="text-sm tracking-[0.22em] text-[#7f95bb]">LIVEODI</span>
-						{returnVisit && (
-							<span className="text-xs px-2 py-0.5 rounded-full bg-[#6f6dff22] text-[#b8b6ff] border border-[#6f6dff44]">
-								retorno
+						{returnVisit && <span className="text-xs px-2 py-0.5 rounded-full bg-[#6f6dff22] text-[#b8b6ff] border border-[#6f6dff44]">retorno</span>}
+						{isSpeaking && <span className="text-xs px-2 py-0.5 rounded-full bg-[#ec489922] text-[#ec4899] border border-[#ec489944] animate-pulse">hablando</span>}
+						{liveManifest && (
+							<span className="text-xs text-[#4a5f7f]">
+								{liveManifest.stores_active || 0} tiendas · {(liveManifest.products_total || 0).toLocaleString()} productos · {liveManifest.services_alive}/{liveManifest.services_total} servicios
 							</span>
 						)}
 					</div>
@@ -266,123 +357,360 @@ export function AgentHabitat() {
 					</div>
 				</header>
 
-				{/* ── Grid: Flame + Events + Sidebar ── */}
-				<div className="grid gap-6" style={{ gridTemplateColumns: showManifest ? "1fr 2fr 280px" : "1fr 2fr", gridTemplateRows: "auto 1fr" }}>
+				{/* ── Grid ── */}
+				<div className="grid gap-6" style={{ gridTemplateColumns: showSidebar ? "180px 1fr 300px" : "180px 1fr" }}>
 
-					{/* ── Flame ── */}
-					<section className="flex flex-col items-center justify-start pt-8">
-						<div
-							className="w-32 h-32 rounded-full"
-							style={{
-								background: flameGradient[phase],
-								boxShadow: flameShadow[phase],
-								animation: phase === "live" ? "breathe 4s ease-in-out infinite" : "none",
-								transition: "box-shadow 0.6s, background 0.6s",
-							}}
-						/>
-						<p className="text-xs text-[#7f95bb] mt-4 text-center">
+					{/* ── Flame column ── */}
+					<section className="flex flex-col items-center pt-8">
+						<div className="w-28 h-28 rounded-full" style={{
+							background: isSpeaking ? "radial-gradient(circle at 50% 35%, #ec4899 0%, #be185d 40%, #6f6dff 70%, transparent 100%)" : flameGradient[phase],
+							boxShadow: isSpeaking ? "0 0 40px #ec489988, inset 0 0 30px #ec489944" : flameShadow[phase],
+							animation: phase === "live" ? "breathe 4s ease-in-out infinite" : "none",
+							transition: "box-shadow 0.6s, background 0.6s",
+						}} />
+						<p className="text-xs text-[#7f95bb] mt-3 text-center">
 							{phase === "live" && heartbeats > 0 && `${heartbeats} latidos`}
 						</p>
 						{phase === "live" && (
-							<button
-								onClick={() => setShowManifest((v) => !v)}
-								className="mt-3 text-xs text-[#49c2ff] hover:text-[#9be2ff] transition-colors cursor-pointer bg-transparent border-none"
-							>
-								{showManifest ? "Ocultar manifest" : "Ver manifest"}
-							</button>
+							<>
+								<div className="flex gap-2 mt-3">
+									<button onClick={() => setInputMode("text")} className={`text-[10px] px-2.5 py-1 rounded-full border cursor-pointer transition-colors ${inputMode === "text" ? "bg-[#49c2ff22] border-[#49c2ff44] text-[#49c2ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f]"}`}>Texto</button>
+									<button onClick={() => setInputMode("voice")} className={`text-[10px] px-2.5 py-1 rounded-full border cursor-pointer transition-colors ${inputMode === "voice" ? "bg-[#ec489922] border-[#ec489944] text-[#ec4899]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f]"}`}>Voz</button>
+								</div>
+								<button onClick={() => setShowSidebar((v) => !v)} className="mt-3 text-[10px] text-[#49c2ff] hover:text-[#9be2ff] transition-colors cursor-pointer bg-transparent border-none">
+									{showSidebar ? "Ocultar panel" : "Panel"}
+								</button>
+							</>
 						)}
-						<p className="text-[10px] text-[#4a5f7f] mt-2">
-							{WS_URLS[wsUrlIdx]?.replace("wss://", "").replace("ws://", "")}
-						</p>
+						<p className="text-[9px] text-[#4a5f7f] mt-2">{WS_URLS[wsUrlIdx]?.replace("wss://", "").replace("ws://", "")}</p>
 					</section>
 
-					{/* ── Event Stream ── */}
-					<section className="overflow-y-auto max-h-[75vh] pr-2">
+					{/* ── Events + Input + Flow player ── */}
+					<section className="flex flex-col max-h-[80vh]">
 						<h2 className="text-xs tracking-[0.18em] text-[#7f95bb] mb-3">EVENTOS</h2>
-						{events.length === 0 && phase !== "live" && (
-							<p className="text-sm text-[#4a5f7f]">Esperando conexion...</p>
-						)}
-						{events.length === 0 && phase === "live" && (
-							<p className="text-sm text-[#4a5f7f]">Conectado. Esperando impulsos...</p>
-						)}
-						<div className="grid gap-2">
-							{events.map((ev) => (
-								<article
-									key={ev.event_id}
-									className="rounded-lg border border-[#1a2a42] bg-[#0a1628] px-4 py-3"
-									style={{ animation: "fadeIn 0.3s ease-out" }}
-								>
-									<div className="flex items-center gap-2 mb-1">
-										<span
-											className="text-xs font-semibold px-1.5 py-0.5 rounded"
-											style={{
-												color: SOURCE_COLORS[ev.source] || "#7f95bb",
-												backgroundColor: `${SOURCE_COLORS[ev.source] || "#7f95bb"}18`,
-											}}
-										>
-											{ev.source}
-										</span>
-										<span className="text-xs text-[#4a5f7f]">{ev.type}</span>
-										{ev.voice && <span className="text-xs text-[#4a5f7f]">({ev.voice})</span>}
-										{ev.mode && <span className="text-xs text-[#4a5f7f]">{ev.mode}</span>}
-										<span className="text-xs text-[#3a4f6f] ml-auto">{timeAgo(ev.ts)}</span>
+
+						{/* Chat/Voice Input */}
+						{phase === "live" && (
+							<div className="mb-3">
+								{inputMode === "voice" ? (
+									<button onMouseDown={startListening} onMouseUp={stopListening} onTouchStart={startListening} onTouchEnd={stopListening}
+										className="w-full rounded-xl border px-4 py-3 text-sm cursor-pointer transition-colors"
+										style={{ background: isListening ? "#ff444415" : "#49c2ff08", borderColor: isListening ? "#ff444444" : "#35537c", color: isListening ? "#ff4444" : "#b6e5ff", animation: isListening ? "pulse 0.8s infinite" : "none" }}>
+										{isListening ? "Escuchando..." : "Mantener presionado para hablar"}
+									</button>
+								) : (
+									<div className="flex gap-2">
+										<input ref={inputRef} type="text" autoComplete="off" placeholder="Escribe a ODI..." value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSend()} disabled={isSending}
+											className="flex-1 rounded-xl border border-[#35537c] bg-[rgba(7,18,33,0.7)] text-[#ddebff] px-4 py-3 text-sm outline-none focus:border-[#49c2ff] transition-colors disabled:opacity-50" />
+										<button onClick={() => handleSend()} disabled={isSending || !chatInput.trim()}
+											className="px-4 py-3 rounded-xl border border-[#35537c] bg-[#49c2ff11] text-[#49c2ff] text-sm cursor-pointer hover:bg-[#49c2ff22] transition-colors disabled:opacity-30 disabled:cursor-default">
+											{isSending ? "..." : "Enviar"}
+										</button>
 									</div>
-									{ev.system_action?.status && (
-										<p className="text-sm text-[#b6e5ff] mb-1">{ev.system_action.status}</p>
+								)}
+							</div>
+						)}
+
+						{/* Return Card */}
+						{showReturnCard && returnContext && (
+							<div className="mb-3 rounded-xl border border-[#c4a0ff22] p-3.5" style={{ background: "linear-gradient(135deg, #c4a0ff08, #060d18)" }}>
+								<div className="flex items-center justify-between mb-2">
+									<div className="flex items-center gap-2">
+										<span className="text-sm">&#x1F9E0;</span>
+										<span className="text-xs font-semibold text-[#c4a0ff]">Bienvenido de vuelta</span>
+										<span className="text-[10px] px-1.5 py-0.5 rounded bg-[#c4a0ff15] text-[#c4a0ff]">
+											Visita #{returnContext.visit_count}
+										</span>
+									</div>
+									<button onClick={() => setShowReturnCard(false)} className="text-xs text-[#4a5f7f] bg-transparent border-none cursor-pointer hover:text-[#7f95bb]">
+										&#x2715;
+									</button>
+								</div>
+								{returnContext.resume_text && (
+									<p className="text-sm text-[#d8e8ff] mb-3 pl-2 border-l-2 border-[#c4a0ff33] leading-relaxed">
+										{returnContext.resume_text}
+									</p>
+								)}
+								{returnContext.incomplete_flows?.length > 0 && (
+									<div className="mb-3">
+										<p className="text-[10px] text-[#4a5f7f] font-semibold mb-1.5">FLUJOS PENDIENTES</p>
+										{returnContext.incomplete_flows.map((f: any, i: number) => (
+											<button key={i} onClick={() => { setShowReturnCard(false); startFlow(f.flow_id); }}
+												className="flex items-center justify-between w-full px-2.5 py-1.5 mt-1 rounded-lg bg-[#0b1625] border border-[#162842] cursor-pointer hover:bg-[#0f1d30] transition-colors">
+												<span className="text-xs text-[#d8e8ff]">{f.flow_id?.replace(/_/g, " ")}</span>
+												<span className="text-[10px] text-[#c4a0ff]">paso {f.last_step} &#x2192;</span>
+											</button>
+										))}
+									</div>
+								)}
+								<div className="flex gap-2">
+									{returnContext.incomplete_flows?.length > 0 && (
+										<button onClick={() => { setShowReturnCard(false); startFlow(returnContext.incomplete_flows[0].flow_id); }}
+											className="px-3 py-1.5 rounded-lg bg-[#c4a0ff15] border border-[#c4a0ff33] text-[#c4a0ff] text-xs font-semibold cursor-pointer hover:bg-[#c4a0ff22] transition-colors">
+											&#x25B6; Continuar
+										</button>
 									)}
-									{ev.payload?.text && (
-										<p className="text-sm text-[#8ca0c6]">{ev.payload.text}</p>
-									)}
-								</article>
-							))}
+									<button onClick={() => setShowReturnCard(false)}
+										className="px-3 py-1.5 rounded-lg bg-transparent border border-[#162842] text-[#4a5f7f] text-xs cursor-pointer hover:text-[#7f95bb] transition-colors">
+										Empezar de nuevo
+									</button>
+								</div>
+							</div>
+						)}
+
+						{/* Active flow player */}
+						{activeFlowId && activeFlowSeq.length > 0 && (
+							<div className="mb-3 rounded-lg border border-[#2a1a42] bg-[#0d0a1e] p-3">
+								<div className="flex items-center justify-between mb-2">
+									<span className="text-xs font-semibold text-[#a78bfa]">
+										{activeFlowMeta?.icon} {activeFlowMeta?.label} — paso {activeFlowStep + 1}/{activeFlowSeq.length}
+									</span>
+									<div className="flex gap-2">
+										<button onClick={advanceFlow} className="text-[10px] px-2 py-0.5 rounded border border-[#a78bfa44] text-[#a78bfa] bg-transparent cursor-pointer hover:bg-[#a78bfa11]">
+											{activeFlowStep >= activeFlowSeq.length - 1 ? "Cerrar" : "Siguiente \u2192"}
+										</button>
+										<button onClick={closeFlow} className="text-[10px] px-2 py-0.5 rounded border border-[#ff444444] text-[#ff4444] bg-transparent cursor-pointer hover:bg-[#ff444411]">\u2715</button>
+									</div>
+								</div>
+								<div className="grid gap-1.5 max-h-[200px] overflow-y-auto">
+									{activeFlowSeq.slice(0, activeFlowStep + 1).map((step: any, i: number) => (
+										<div key={i} className="rounded px-2.5 py-1.5 text-xs" style={{
+											background: step.role === "user" ? "#49c2ff08" : "#0a1628",
+											borderLeft: `2px solid ${step.voice === "tony" ? "#ffcc00" : step.voice === "ramona" ? "#ec4899" : "#4a5f7f"}`,
+										}}>
+											<div className="flex gap-2 items-center mb-0.5">
+												{step.voice && <span className="w-1.5 h-1.5 rounded-full" style={{ background: step.voice === "ramona" ? "#ec4899" : "#ffcc00" }} />}
+												<span className="text-[10px] text-[#4a5f7f]">{step.role || step.phase || "?"}</span>
+												{step.mode && <span className="text-[10px] text-[#7f95bb]">{step.mode}</span>}
+											</div>
+											<p className="text-[#dbe7ff]">{step.text}</p>
+											{step.detail && <p className="text-[10px] text-[#4a5f7f] italic mt-0.5">{step.detail}</p>}
+											{step.products?.map((p: any, j: number) => (
+												<p key={j} className="text-[10px] text-[#8ca0c6] mt-0.5">
+													{p.title}{p.price ? ` — $${p.price.toLocaleString()}` : ""}{p.from ? ` (${p.from})` : ""}
+												</p>
+											))}
+											{step.system_action?.status && <p className="text-[10px] text-[#ffcc00] mt-0.5">{step.system_action.status}</p>}
+										</div>
+									))}
+								</div>
+							</div>
+						)}
+
+						{/* Events stream */}
+						<div className="overflow-y-auto flex-1 pr-2">
+							{events.length === 0 && phase !== "live" && <p className="text-sm text-[#4a5f7f]">Esperando conexion...</p>}
+							{events.length === 0 && phase === "live" && <p className="text-sm text-[#4a5f7f]">Conectado. Esperando impulsos...</p>}
+							<div className="grid gap-2">
+								{events.map((ev) => (
+									<article key={ev.event_id} className="rounded-lg border border-[#1a2a42] bg-[#0a1628] px-4 py-3" style={{ animation: "fadeIn 0.3s ease-out" }}>
+										<div className="flex items-center gap-2 mb-1">
+											<span className="text-xs font-semibold px-1.5 py-0.5 rounded" style={{ color: SOURCE_COLORS[ev.source] || "#7f95bb", backgroundColor: `${SOURCE_COLORS[ev.source] || "#7f95bb"}18` }}>{ev.source}</span>
+											<span className="text-xs text-[#4a5f7f]">{ev.type}</span>
+											{ev.voice && <span className="text-xs text-[#4a5f7f]">({ev.voice})</span>}
+											{ev.mode && <span className="text-xs text-[#4a5f7f]">{ev.mode}</span>}
+											<span className="text-xs text-[#3a4f6f] ml-auto">{timeAgo(ev.ts)}</span>
+										</div>
+										{ev.system_action?.status && <p className="text-sm text-[#b6e5ff] mb-1">{ev.system_action.status}</p>}
+										{ev.payload?.text && <p className="text-sm text-[#8ca0c6]">{ev.payload.text}</p>}
+									</article>
+								))}
+							</div>
 						</div>
 					</section>
 
-					{/* ── Manifest Sidebar ── */}
-					{showManifest && manifest && (
-						<aside className="overflow-y-auto max-h-[75vh] rounded-lg border border-[#1a2a42] bg-[#0a1628] p-4">
-							<h3 className="text-xs tracking-[0.18em] text-[#7f95bb] mb-3">MANIFEST</h3>
+					{/* ── Sidebar: Flows / Manifest / Stats ── */}
+					{showSidebar && (
+						<aside className="overflow-y-auto max-h-[80vh] rounded-lg border border-[#1a2a42] bg-[#0a1628] p-3">
+							{/* Tabs */}
+							<div className="flex gap-1 mb-3">
+								{(["flows", "manifest", "stats"] as SideTab[]).map((t) => (
+									<button key={t} onClick={() => setSideTab(t)}
+										className={`text-[10px] px-2 py-1 rounded-full border cursor-pointer transition-colors ${sideTab === t ? "bg-[#49c2ff22] border-[#49c2ff44] text-[#49c2ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f] hover:text-[#7f95bb]"}`}>
+										{t === "flows" ? `Flujos (${flows.length})` : t === "manifest" ? "Manifest" : "Stats"}
+									</button>
+								))}
+							</div>
 
-							<div className="mb-4">
-								<h4 className="text-xs text-[#49c2ff] mb-2">Capabilities</h4>
-								<div className="grid gap-1">
-									{Object.entries(manifest.capabilities).map(([k, v]) => (
-										<div key={k} className="flex items-center gap-2 text-xs">
-											<span className={v ? "text-[#3af08f]" : "text-[#4a5f7f]"}>{v ? "\u25CF" : "\u25CB"}</span>
-											<span className="text-[#8ca0c6]">{k}</span>
-										</div>
-									))}
+							{/* ── Flows tab ── */}
+							{sideTab === "flows" && (
+								<div className="grid gap-3">
+									{categories.map((cat: any) => {
+										const catFlows = flowsByCategory[cat.id] || [];
+										if (catFlows.length === 0) return null;
+										return (
+											<div key={cat.id}>
+												<h4 className="text-[10px] font-semibold mb-1.5" style={{ color: cat.color || "#7f95bb" }}>
+													{cat.icon} {cat.label} ({catFlows.length})
+												</h4>
+												<div className="grid gap-1">
+													{catFlows.map((f: any) => (
+														<button key={f.id} onClick={() => startFlow(f.id)}
+															className="text-left rounded px-2 py-1.5 border border-[#1a2a42] bg-[#03070d] hover:bg-[#0a1628] transition-colors cursor-pointer">
+															<div className="flex items-center gap-1.5">
+																<span className="text-xs">{f.icon}</span>
+																<span className="text-[11px] text-[#dbe7ff]">{f.label}</span>
+																<span className={`text-[9px] ml-auto px-1 rounded ${f.readiness === "live" ? "text-[#3af08f] bg-[#3af08f11]" : f.readiness === "partial" ? "text-[#ffcc00] bg-[#ffcc0011]" : "text-[#4a5f7f] bg-[#4a5f7f11]"}`}>
+																	{f.readiness}
+																</span>
+															</div>
+															<p className="text-[9px] text-[#4a5f7f] mt-0.5 line-clamp-1">{f.desc}</p>
+															<p className="text-[9px] text-[#3a4f6f]">{f.steps} pasos · {f.services?.join(", ")}</p>
+														</button>
+													))}
+												</div>
+											</div>
+										);
+									})}
 								</div>
-							</div>
+							)}
 
-							<div className="mb-4">
-								<h4 className="text-xs text-[#49c2ff] mb-2">Services</h4>
-								<div className="grid gap-1">
-									{Object.entries(manifest.services).map(([k, v]) => (
-										<div key={k} className="flex items-center justify-between text-xs">
-											<span className="text-[#8ca0c6]">{k}</span>
-											<span className="text-[#3af08f]">:{v.port}</span>
+							{/* ── Manifest tab ── */}
+							{sideTab === "manifest" && liveManifest && (
+								<div className="grid gap-3">
+									<div>
+										<h4 className="text-[10px] text-[#49c2ff] font-semibold mb-1.5">
+											Servicios ({liveManifest.services_alive}/{liveManifest.services_total} alive)
+										</h4>
+										<div className="grid gap-1">
+											{Object.entries(liveManifest.services || {}).map(([k, v]: [string, any]) => (
+												<div key={k} className="flex items-center justify-between text-xs">
+													<span className="text-[#8ca0c6]">{k}</span>
+													<span style={{ color: SVC_COLOR[v.status] || "#4a5f7f" }}>{v.status}</span>
+												</div>
+											))}
 										</div>
-									))}
-								</div>
-							</div>
-
-							<div>
-								<h4 className="text-xs text-[#49c2ff] mb-2">Context</h4>
-								<div className="grid gap-1">
-									{Object.entries(manifest.context).map(([k, v]) => (
-										<div key={k} className="text-xs">
-											<span className="text-[#4a5f7f]">{k}: </span>
-											<span className="text-[#8ca0c6]">{v}</span>
+									</div>
+									<div>
+										<h4 className="text-[10px] text-[#49c2ff] font-semibold mb-1.5">Capabilities</h4>
+										<div className="grid gap-0.5">
+											{Object.entries(liveManifest.capabilities || {}).map(([k, v]: [string, any]) => (
+												<div key={k} className="flex items-center gap-1.5 text-xs">
+													<span className={v ? "text-[#3af08f]" : "text-[#4a5f7f]"}>{v ? "\u25CF" : "\u25CB"}</span>
+													<span className="text-[#8ca0c6]">{k}</span>
+												</div>
+											))}
 										</div>
-									))}
-								</div>
-							</div>
+									</div>
+									{/* === Stores === */}
+									<div>
+										<h4 className="text-[10px] text-[#ff9800] font-semibold mb-1.5 tracking-wider">
+											TIENDAS ({stores.filter(s => (s.active || 0) > 0).length}/{stores.length})
+										</h4>
+										<div className="grid gap-0.5">
+											{stores.filter(s => (s.active || 0) > 0).map((s, i) => {
+												const grade = s.grade || "?";
+												const gradeColor = grade.startsWith("A") ? "#3af08f" : grade === "OK" ? "#ffcc00" : "#4a5f7f";
+												return (
+													<div key={i} className="flex items-center justify-between text-xs">
+														<div className="flex items-center gap-1.5">
+															<span className="w-1.5 h-1.5 rounded-full bg-[#3af08f]" />
+															<span className="text-[#8ca0c6]">{s.store_id || "?"}</span>
+														</div>
+														<div className="flex items-center gap-2">
+															<span className="text-[#4a5f7f] text-[10px]">{(s.active || 0).toLocaleString()}</span>
+															<span className="text-[10px] px-1 rounded font-semibold" style={{ color: gradeColor, backgroundColor: gradeColor + "18" }}>{grade}</span>
+														</div>
+													</div>
+												);
+											})}
+										</div>
+										<div className="flex items-center justify-between text-[10px] pt-1.5 mt-1.5 border-t border-[#1a2a42]">
+											<span className="text-[#4a5f7f] font-semibold">TOTAL PRODUCTOS</span>
+											<span className="text-[#ff9800] font-semibold">{stores.reduce((sum, s) => sum + (s.active || 0), 0).toLocaleString()}</span>
+										</div>
+									</div>
 
-							<div className="mt-4 pt-3 border-t border-[#1a2a42] text-[10px] text-[#4a5f7f]">
-								<p>device: {deviceRef.current}</p>
-								<p>session: {sessionRef.current.slice(0, 12)}...</p>
-							</div>
+									{/* === Ecosystem === */}
+									{liveManifest?.ecosystem && (
+										<div>
+											<h4 className="text-[10px] text-[#29b6f6] font-semibold mb-1.5 tracking-wider">ECOSISTEMA</h4>
+											<div className="grid grid-cols-2 gap-1">
+												{[
+													{ label: "Pipeline", value: liveManifest.ecosystem.pipeline_version || "?", color: "#ffcc00" },
+													{ label: "PG Tables", value: liveManifest.ecosystem.pg_tables || 0, color: "#29b6f6" },
+													{ label: "PG Rows", value: (liveManifest.ecosystem.pg_rows || 0).toLocaleString(), color: "#29b6f6" },
+													{ label: "ChromaDB", value: `${(liveManifest.ecosystem.chromadb_docs || 0).toLocaleString()} docs`, color: "#a78bfa" },
+													{ label: "Jobs", value: liveManifest.ecosystem.pipeline_jobs || 0, color: "#ffcc00" },
+													{ label: "Industrias", value: liveManifest.ecosystem.industries || 0, color: "#3af08f" },
+													{ label: "CES", value: `${liveManifest.ecosystem.ces_principles || 0} princ`, color: "#ec4899" },
+													{ label: "Radar", value: `${liveManifest.ecosystem.radar_disciplines || 0} disc`, color: "#29b6f6" },
+													{ label: "Git", value: `${liveManifest.ecosystem.git_commits || 0} commits`, color: "#4a5f7f" },
+													{ label: "Events", value: (liveManifest.ecosystem.agent_events || 0).toLocaleString(), color: "#49c2ff" },
+												].map((item, i) => (
+													<div key={i} className="rounded bg-[#03070d88] px-1.5 py-1">
+														<div className="text-[9px] text-[#4a5f7f]">{item.label}</div>
+														<div className="text-[11px] font-semibold" style={{ color: item.color }}>{item.value}</div>
+													</div>
+												))}
+											</div>
+											{liveManifest.ecosystem.chromadb_collections?.length > 0 && (
+												<div className="mt-1.5">
+													<div className="text-[9px] text-[#4a5f7f] mb-0.5">Collections</div>
+													{liveManifest.ecosystem.chromadb_collections.map((c: any, i: number) => (
+														<div key={i} className="flex items-center justify-between text-[10px] text-[#4a5f7f]">
+															<span>{c.name}</span>
+															<span>{(c.docs || 0).toLocaleString()}</span>
+														</div>
+													))}
+												</div>
+											)}
+										</div>
+									)}
+
+									{/* === WhatsApp === */}
+									{liveManifest?.whatsapp && (
+										<div className="rounded-lg p-2 border border-[#25D36622]" style={{ background: "#25D36608" }}>
+											<div className="flex items-center gap-1.5">
+												<span className="text-xs font-semibold text-[#25D366]">WhatsApp</span>
+												<span className="text-[9px] px-1 rounded bg-[#25D36615] text-[#25D366]">{liveManifest.whatsapp.status}</span>
+											</div>
+											<div className="text-[10px] text-[#4a5f7f] mt-0.5">
+												{liveManifest.whatsapp.number} · {liveManifest.whatsapp.multi_industry ? "Multi-industria" : "Mono"}
+											</div>
+										</div>
+									)}
+
+									<div className="text-[10px] text-[#4a5f7f] pt-2 border-t border-[#1a2a42]">
+										<p>v{liveManifest.version} · {liveManifest.flows_available} flows</p>
+										<p>device: {deviceRef.current.slice(0, 16)}</p>
+										<p>session: {sessionRef.current.slice(0, 12)}...</p>
+									</div>
+								</div>
+							)}
+
+							{/* ── Stats tab ── */}
+							{sideTab === "stats" && stats && (
+								<div className="grid gap-3">
+									<div className="grid grid-cols-2 gap-2">
+										{[
+											["Devices", stats.devices_total],
+											["Sessions", stats.sessions_total],
+											["Events", stats.events_total],
+											["Flows done", stats.flows_completed],
+										].map(([label, val]) => (
+											<div key={label as string} className="rounded border border-[#1a2a42] bg-[#03070d] p-2 text-center">
+												<p className="text-lg font-bold text-[#dbe7ff]">{(val as number)?.toLocaleString()}</p>
+												<p className="text-[9px] text-[#4a5f7f]">{label as string}</p>
+											</div>
+										))}
+									</div>
+									<div>
+										<h4 className="text-[10px] text-[#49c2ff] font-semibold mb-1.5">Events by source</h4>
+										<div className="grid gap-1">
+											{Object.entries(stats.events_by_source || {}).map(([src, count]: [string, any]) => (
+												<div key={src} className="flex items-center justify-between text-xs">
+													<span style={{ color: SOURCE_COLORS[src] || "#7f95bb" }}>{src}</span>
+													<span className="text-[#8ca0c6]">{count}</span>
+												</div>
+											))}
+										</div>
+									</div>
+									<p className="text-[9px] text-[#4a5f7f]">
+										{stats.sessions_active} sesiones activas ahora
+									</p>
+								</div>
+							)}
 						</aside>
 					)}
 				</div>
