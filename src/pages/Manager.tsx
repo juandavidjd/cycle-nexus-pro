@@ -298,7 +298,7 @@ function TabOrganismos() {
   );
 }
 
-// ── Tab: Guardian ──
+// ── Tab: Guardian V2.1.1 — 5 Frentes con Semáforo Independiente ──
 function TabGuardian() {
   const [data, setData] = useState<Record<string, any> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -314,58 +314,115 @@ function TabGuardian() {
   if (!data) return <p className="text-muted-foreground text-sm py-8 text-center">Sin datos</p>;
 
   const eco = (data.ecosystem || {}) as Record<string, any>;
-  const stores = (data.stores || []) as Record<string, any>[];
+  const fronts = (eco.fronts || {}) as Record<string, any>;
+  const storesDetail = ((data.fronts_detail || {}) as Record<string, any>).stores || {};
+  const configured = (storesDetail.configured || []) as Record<string, any>[];
+  const unconfigured = (storesDetail.unconfigured || []) as Record<string, any>[];
+
   const sColors: Record<string, string> = { verde: "bg-emerald-500", amarillo: "bg-yellow-500", naranja: "bg-orange-500", rojo: "bg-red-500", gris: "bg-muted" };
   const sText: Record<string, string> = { verde: "text-emerald-400", amarillo: "text-yellow-400", naranja: "text-orange-400", rojo: "text-red-400", gris: "text-muted-foreground" };
+  const sBar: Record<string, string> = { verde: "bg-emerald-500", amarillo: "bg-yellow-500", naranja: "bg-orange-500", rojo: "bg-red-500", gris: "bg-muted" };
+  const frontLabels: Record<string, string> = { stores: "Stores", services: "Services", agent: "Agent", ces: "CES", radar: "Radar" };
 
   return (
     <div className="space-y-6">
+      {/* Semáforo global */}
       <Card className="bg-card text-center py-6">
         <CardContent className="space-y-3">
-          <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center ${sColors[eco.semaforo as string] || "bg-muted"}`}>
+          <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center ${sColors[eco.semaphore as string] || "bg-muted"}`}>
             <span className="text-2xl font-extrabold text-white">{eco.health_index}</span>
           </div>
-          <p className={`text-sm font-bold uppercase tracking-wide ${sText[eco.semaforo as string] || "text-muted-foreground"}`}>{eco.semaforo as string}</p>
-          <div className="flex justify-center gap-4 text-xs text-muted-foreground">
-            <span className="text-emerald-400">{eco.verde as number} verde</span>
-            <span className="text-yellow-400">{eco.amarillo as number} amarillo</span>
-            <span className="text-orange-400">{eco.naranja as number} naranja</span>
-            <span className="text-red-400">{eco.rojo as number} rojo</span>
-          </div>
+          <p className={`text-sm font-bold uppercase tracking-wide ${sText[eco.semaphore as string] || "text-muted-foreground"}`}>
+            {eco.semaphore as string}
+          </p>
+          <p className="text-xs text-muted-foreground">Health Index Ecosistema</p>
+          {eco.summary && (eco.semaphore as string) !== "verde" && (
+            <div className="mx-auto max-w-md text-left text-xs px-3 py-2 rounded-md bg-yellow-500/10 border border-yellow-500/20 text-yellow-300">
+              {eco.summary as string}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { label: "Agent", val: (data.agent as Record<string, any>)?.status, ok: (data.agent as Record<string, any>)?.status === "alive" },
-          { label: "CES", val: `${(data.ces as Record<string, any>)?.status} (${(data.ces as Record<string, any>)?.principles_count || 0}p)`, ok: ["active", "live"].includes((data.ces as Record<string, any>)?.status) },
-          { label: "Radar", val: (data.radar as Record<string, any>)?.status, ok: (data.radar as Record<string, any>)?.status === "alive" },
-          { label: "Servicios", val: `${data.services_alive}/${data.services_total}`, ok: true },
-        ].map(s => (
-          <Card key={s.label} className="bg-card">
-            <CardContent className="p-4">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{s.label}</p>
-              <p className={`text-sm font-semibold ${s.ok ? "text-emerald-400" : "text-red-400"}`}>{String(s.val || "—").toUpperCase()}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
+      {/* 5 Frentes */}
       <Card className="bg-card">
         <CardHeader className="pb-2">
-          <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Tiendas por criticidad</CardTitle>
+          <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
+            Frentes del Ecosistema
+          </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-1">
-          {stores.map((s: Record<string, any>) => (
-            <div key={s.store_id as string} className="flex items-center gap-3 py-1.5 border-b border-border/50 last:border-0 text-sm">
-              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${sColors[s.semaforo as string] || "bg-muted"}`} />
-              <span className="font-semibold w-20">{(s.store_id as string).toUpperCase()}</span>
-              <Badge variant="outline" className={gradeColor(s.grade as string)}>{s.grade as string || "—"}</Badge>
-              <span className="text-muted-foreground text-xs ml-auto">{s.active as number} activos</span>
-            </div>
-          ))}
+        <CardContent className="space-y-4">
+          {["stores", "services", "agent", "ces", "radar"].map(name => {
+            const f = fronts[name] || {};
+            const pct = Math.round((f.health || 0) * 100);
+            const sem = f.semaphore as string || "gris";
+            return (
+              <div key={name} className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-3 h-3 rounded-full shrink-0 ${sBar[sem] || "bg-muted"}`} />
+                    <span className="text-sm font-semibold">{frontLabels[name] || name}</span>
+                  </div>
+                  <span className={`text-sm font-bold ${sText[sem] || "text-muted-foreground"}`}>{pct}%</span>
+                </div>
+                <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${sBar[sem] || "bg-muted"}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">{f.summary as string || "—"}</p>
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
+
+      {/* Tiendas configuradas */}
+      {configured.length > 0 && (
+        <Card className="bg-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
+              Tiendas Configuradas ({configured.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            {configured.map((s: Record<string, any>) => (
+              <div key={s.store_id as string} className="flex items-center gap-3 py-1.5 border-b border-border/50 last:border-0 text-sm">
+                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${sColors[s.semaforo as string] || "bg-muted"}`} />
+                <span className="font-semibold w-20">{(s.store_id as string).toUpperCase()}</span>
+                <Badge variant="outline" className={gradeColor(s.grade as string)}>{s.grade as string || "—"}</Badge>
+                <span className="text-emerald-400 text-xs ml-auto">{(s.active as number).toLocaleString()} activos</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Tiendas sin configurar — gris neutro */}
+      {unconfigured.length > 0 && (
+        <Card className="bg-card border-border/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-bold text-muted-foreground/60 uppercase tracking-wide">
+              Sin Configurar ({unconfigured.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-0.5">
+              {unconfigured.map((s: Record<string, any>) => (
+                <div key={s.store_id as string} className="flex items-center gap-2.5 py-1 text-xs text-muted-foreground/60">
+                  <span className="w-2 h-2 rounded-full shrink-0 bg-muted" />
+                  <span>{(s.store_id as string).toUpperCase()}</span>
+                  {(s.draft as number) > 0 && <span className="ml-auto">{s.draft as number} drafts</span>}
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground/40 italic mt-3">
+              Estas tiendas no tienen productos activos. No representan riesgo.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {data.nota_etica && (
         <p className="text-[10px] text-muted-foreground italic text-center">{data.nota_etica as string}</p>
