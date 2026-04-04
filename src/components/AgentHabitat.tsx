@@ -38,6 +38,7 @@ const SOURCE_COLORS: Record<string, string> = {
 	voice: "#ec4899", flow: "#a78bfa",
 	whatsapp: "#25D366", manager: "#ff9800",
 	turismo: "#ff7043", lead: "#26a69a",
+	ces: "#ef5350",
 };
 
 const SVC_COLOR: Record<string, string> = {
@@ -271,6 +272,31 @@ export function AgentHabitat() {
 		setActiveFlowId(null); setActiveFlowSeq([]); setActiveFlowStep(0); setActiveFlowMeta(null);
 	}, []);
 
+	const dismissFlow = useCallback(async (flowId: string) => {
+		try {
+			await fetch(`${AGENT_API}/flows/${flowId}/dismiss`, {
+				method: "POST", headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ device_id: deviceRef.current }),
+			});
+		} catch {}
+	}, []);
+
+	const startFlowFromStep = useCallback(async (flowId: string, fromStep: number) => {
+		try {
+			const [seqR, flowR] = await Promise.all([
+				fetch(`${AGENT_API}/flows/${flowId}/sequence`),
+				fetch(`${AGENT_API}/flows/${flowId}`),
+			]);
+			if (!seqR.ok) return;
+			const seqData = await seqR.json();
+			const flowData = flowR.ok ? await flowR.json() : null;
+			setActiveFlowId(flowId);
+			setActiveFlowMeta(flowData);
+			setActiveFlowSeq(seqData.steps || []);
+			setActiveFlowStep(fromStep);
+		} catch {}
+	}, []);
+
 	// === WS connect ===
 	const connect = useCallback(() => {
 		cleanup();
@@ -422,7 +448,7 @@ export function AgentHabitat() {
 											Visita #{returnContext.visit_count}
 										</span>
 									</div>
-									<button onClick={() => setShowReturnCard(false)} className="text-xs text-[#4a5f7f] bg-transparent border-none cursor-pointer hover:text-[#7f95bb]">
+									<button onClick={() => { returnContext?.incomplete_flows?.forEach((f: any) => dismissFlow(f.flow_id)); setShowReturnCard(false); }} className="text-xs text-[#4a5f7f] bg-transparent border-none cursor-pointer hover:text-[#7f95bb]">
 										&#x2715;
 									</button>
 								</div>
@@ -435,7 +461,7 @@ export function AgentHabitat() {
 									<div className="mb-3">
 										<p className="text-[10px] text-[#4a5f7f] font-semibold mb-1.5">FLUJOS PENDIENTES</p>
 										{returnContext.incomplete_flows.map((f: any, i: number) => (
-											<button key={i} onClick={() => { setShowReturnCard(false); startFlow(f.flow_id); }}
+											<button key={i} onClick={() => { setShowReturnCard(false); startFlowFromStep(f.flow_id, f.last_step || 0); }}
 												className="flex items-center justify-between w-full px-2.5 py-1.5 mt-1 rounded-lg bg-[#0b1625] border border-[#162842] cursor-pointer hover:bg-[#0f1d30] transition-colors">
 												<span className="text-xs text-[#d8e8ff]">{f.flow_id?.replace(/_/g, " ")}</span>
 												<span className="text-[10px] text-[#c4a0ff]">paso {f.last_step} &#x2192;</span>
@@ -445,12 +471,12 @@ export function AgentHabitat() {
 								)}
 								<div className="flex gap-2">
 									{returnContext.incomplete_flows?.length > 0 && (
-										<button onClick={() => { setShowReturnCard(false); startFlow(returnContext.incomplete_flows[0].flow_id); }}
+										<button onClick={() => { setShowReturnCard(false); const f = returnContext.incomplete_flows[0]; startFlowFromStep(f.flow_id, f.last_step || 0); }}
 											className="px-3 py-1.5 rounded-lg bg-[#c4a0ff15] border border-[#c4a0ff33] text-[#c4a0ff] text-xs font-semibold cursor-pointer hover:bg-[#c4a0ff22] transition-colors">
 											&#x25B6; Continuar
 										</button>
 									)}
-									<button onClick={() => setShowReturnCard(false)}
+									<button onClick={() => { returnContext?.incomplete_flows?.forEach((f: any) => dismissFlow(f.flow_id)); setShowReturnCard(false); }}
 										className="px-3 py-1.5 rounded-lg bg-transparent border border-[#162842] text-[#4a5f7f] text-xs cursor-pointer hover:text-[#7f95bb] transition-colors">
 										Empezar de nuevo
 									</button>
@@ -633,7 +659,7 @@ export function AgentHabitat() {
 													{ label: "ChromaDB", value: `${(liveManifest.ecosystem.chromadb_docs || 0).toLocaleString()} docs`, color: "#a78bfa" },
 													{ label: "Jobs", value: liveManifest.ecosystem.pipeline_jobs || 0, color: "#ffcc00" },
 													{ label: "Industrias", value: liveManifest.ecosystem.industries || 0, color: "#3af08f" },
-													{ label: "CES", value: `${liveManifest.ecosystem.ces_principles || 0} princ`, color: "#ec4899" },
+													{ label: "CES", value: liveManifest.ces?.decisions_total ? `${liveManifest.ces.allowed}/${liveManifest.ces.blocked}/${liveManifest.ces.overrides}` : `${liveManifest.ecosystem?.ces_principles || 15} princ`, color: "#ef5350" },
 													{ label: "Radar", value: `${liveManifest.ecosystem.radar_disciplines || 0} disc`, color: "#29b6f6" },
 													{ label: "Git", value: `${liveManifest.ecosystem.git_commits || 0} commits`, color: "#4a5f7f" },
 													{ label: "Events", value: (liveManifest.ecosystem.agent_events || 0).toLocaleString(), color: "#49c2ff" },
@@ -668,6 +694,34 @@ export function AgentHabitat() {
 											<div className="text-[10px] text-[#4a5f7f] mt-0.5">
 												{liveManifest.whatsapp.number} · {liveManifest.whatsapp.multi_industry ? "Multi-industria" : "Mono"}
 											</div>
+										</div>
+									)}
+
+									{/* === CES === */}
+									{liveManifest?.ces && (
+										<div className="rounded-lg p-2 border border-[#ef535022]" style={{ background: "#ef535008" }}>
+											<div className="flex items-center justify-between">
+												<div className="flex items-center gap-1.5">
+													<span className="text-xs font-semibold text-[#ef5350]">CES</span>
+													<span className="text-[9px] px-1 rounded bg-[#ef535015] text-[#ef5350]">{liveManifest.ces.status}</span>
+												</div>
+												<span className="text-[10px] text-[#4a5f7f]">{liveManifest.ces.principles} principios</span>
+											</div>
+											<div className="grid grid-cols-3 gap-1 mt-1.5">
+												<div className="text-center">
+													<div className="text-[11px] font-semibold text-[#3af08f]">{liveManifest.ces.allowed}</div>
+													<div className="text-[8px] text-[#4a5f7f]">allowed</div>
+												</div>
+												<div className="text-center">
+													<div className="text-[11px] font-semibold text-[#ef5350]">{liveManifest.ces.blocked}</div>
+													<div className="text-[8px] text-[#4a5f7f]">blocked</div>
+												</div>
+												<div className="text-center">
+													<div className="text-[11px] font-semibold text-[#ff9800]">{liveManifest.ces.overrides}</div>
+													<div className="text-[8px] text-[#4a5f7f]">override</div>
+												</div>
+											</div>
+											<div className="text-[9px] text-[#4a5f7f] mt-1">{liveManifest.ces.decisions_total} decisiones totales</div>
 										</div>
 									)}
 
