@@ -16,7 +16,7 @@ interface AgentEvent {
 }
 
 type Phase = "idle" | "connecting" | "registering" | "live" | "offline";
-type InputMode = "text" | "voice";
+type InputMode = "text" | "voice" | "signs";
 type SideTab = "flows" | "manifest" | "stats";
 
 // ── Constants ──
@@ -76,7 +76,8 @@ export function AgentHabitat() {
 	const [returnVisit] = useState(isReturn);
 	const [heartbeats, setHeartbeats] = useState(0);
 	const [wsUrlIdx, setWsUrlIdx] = useState(0);
-	const [inputMode, setInputMode] = useState<InputMode>("text");
+	const [inputMode, setInputMode_] = useState<InputMode>("text");
+	const setInputMode = useCallback((m: InputMode) => { setInputMode_(m); inputModeRef.current = m; }, []);
 	const [chatInput, setChatInput] = useState("");
 	const [isSending, setIsSending] = useState(false);
 	const [showSidebar, setShowSidebar] = useState(false);
@@ -133,6 +134,9 @@ export function AgentHabitat() {
 	const speakText = useCallback(async (text: string, voice: string = "ramona") => {
 		if (isSpeaking || !text) return;
 		const truncated = text.length > 500 ? text.slice(0, 497) + "..." : text;
+		// Echo prevention: pause STT while speaking
+		const wasListening = !!recognitionRef.current;
+		if (wasListening) { try { recognitionRef.current?.stop(); } catch {} }
 		try {
 			setIsSpeaking(true);
 			const resp = await fetch(SPEAK_URL, {
@@ -146,8 +150,19 @@ export function AgentHabitat() {
 				if (audioRef.current) { audioRef.current.pause(); URL.revokeObjectURL(audioRef.current.src); }
 				const audio = new Audio(url);
 				audioRef.current = audio;
-				audio.onended = () => { setIsSpeaking(false); URL.revokeObjectURL(url); };
-				audio.onerror = () => setIsSpeaking(false);
+				audio.onended = () => {
+					setIsSpeaking(false); URL.revokeObjectURL(url);
+					// Resume STT after speaking if in voice mode
+					if (inputModeRef.current === "voice" && wasListening) {
+						setTimeout(() => { try { recognitionRef.current?.start(); } catch {} }, 300);
+					}
+				};
+				audio.onerror = () => {
+					setIsSpeaking(false);
+					if (inputModeRef.current === "voice" && wasListening) {
+						setTimeout(() => { try { recognitionRef.current?.start(); } catch {} }, 300);
+					}
+				};
 				await audio.play();
 			} else { setIsSpeaking(false); }
 		} catch { setIsSpeaking(false); }
@@ -156,6 +171,11 @@ export function AgentHabitat() {
 	// === STT ===
 	const recognitionRef = useRef<any>(null);
 	const [isListening, setIsListening] = useState(false);
+	const [interimText, setInterimText] = useState("");
+	const hasGreetedRef = useRef(false);
+	const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const inputModeRef = useRef<InputMode>("text");
 
 	const handleSend = useCallback(async (text?: string) => {
 		const msg = (text || chatInput).trim();
@@ -181,18 +201,71 @@ export function AgentHabitat() {
 		setIsSending(false);
 	}, [chatInput, isSending, inputMode, pushEvent, speakText]);
 
-	const startListening = useCallback(() => {
-		const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-		if (!SR) return;
-		const recognition = new SR();
-		recognition.lang = "es-CO"; recognition.continuous = false; recognition.interimResults = false;
-		recognition.onresult = (event: any) => { const t = event.results[0][0].transcript; if (t.trim()) handleSend(t.trim()); setIsListening(false); };
-		recognition.onerror = () => setIsListening(false);
-		recognition.onend = () => setIsListening(false);
-		recognitionRef.current = recognition; recognition.start(); setIsListening(true);
-	}, [handleSend]);
+	const resetIdleTimer = useCallback(() => {
+		if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+		if (inputModeRef.current === "voice") {
+			idleTimerRef.current = setTimeout(() => {
+				const prompts = ["¿En qué puedo ayudarte?", "Cuéntame.", "¿Necesitas algo?", "Estoy aquí."];
+				const text = prompts[Math.floor(Math.random() * prompts.length)];
+				pushEvent({ event_id: `idle_${Date.now()}`, ts: new Date().toISOString(), source: "agent", type: "state_change", voice: "ramona", mode: "care", payload: { text }, system_action: { type: "idle_push" } });
+				speakText(text, "ramona");
+			}, 10000);
+		}
+	}, [pushEvent, speakText]);
 
-	const stopListening = useCallback(() => { recognitionRef.current?.stop(); setIsListening(false); }, []);
+	const startContinuousListening = useCallback(() => {
+		const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+		if (!SR) {
+			pushEvent({ event_id: `nostt_${Date.now()}`, ts: new Date().toISOString(), source: "agent", type: "state_change", payload: { text: "Tu navegador no soporta voz. Usa texto." }, system_action: { type: "voice_unsupported" } });
+			setInputMode("text");
+			return;
+		}
+		const recognition = new SR();
+		recognition.lang = "es-CO";
+		recognition.continuous = true;
+		recognition.interimResults = true;
+		let currentTranscript = "";
+		recognition.onresult = (event: any) => {
+			let final = "";
+			let interim = "";
+			for (let i = 0; i < event.results.length; i++) {
+				if (event.results[i].isFinal) final += event.results[i][0].transcript + " ";
+				else interim += event.results[i][0].transcript;
+			}
+			currentTranscript = (final + interim).trim();
+			setInterimText(currentTranscript);
+			if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+			silenceTimerRef.current = setTimeout(() => {
+				if (currentTranscript.trim()) {
+					handleSend(currentTranscript.trim());
+					currentTranscript = "";
+					setInterimText("");
+					resetIdleTimer();
+				}
+			}, 2500);
+		};
+		recognition.onend = () => {
+			if (inputModeRef.current === "voice") {
+				try { recognition.start(); } catch {}
+			} else { setIsListening(false); }
+		};
+		recognition.onerror = (e: any) => {
+			if (e.error === "not-allowed") {
+				pushEvent({ event_id: `mic_${Date.now()}`, ts: new Date().toISOString(), source: "agent", type: "state_change", payload: { text: "Necesito permiso de micrófono para escucharte." }, system_action: { type: "mic_denied" } });
+				setInputMode("text");
+			}
+		};
+		try { recognition.start(); recognitionRef.current = recognition; setIsListening(true); resetIdleTimer(); } catch {}
+	}, [handleSend, pushEvent, setInputMode, resetIdleTimer]);
+
+	const stopContinuousListening = useCallback(() => {
+		if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+		if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+		try { recognitionRef.current?.stop(); } catch {}
+		recognitionRef.current = null;
+		setIsListening(false);
+		setInterimText("");
+	}, []);
 
 	// === Load live manifest ===
 	useEffect(() => {
@@ -318,7 +391,23 @@ export function AgentHabitat() {
 			if (!mountedRef.current) return;
 			try {
 				const msg = JSON.parse(e.data);
-				if (msg.type === "manifest") { setPhase("live"); pushEvent({ event_id: msg.session_id || "manifest", ts: msg.ts || new Date().toISOString(), source: "agent", type: "manifest", payload: { text: "Manifest recibido" }, system_action: { type: "manifest", status: "Habitat conectado" } }); return; }
+				if (msg.type === "manifest") {
+					setPhase("live");
+					pushEvent({ event_id: msg.session_id || "manifest", ts: msg.ts || new Date().toISOString(), source: "agent", type: "manifest", payload: { text: "Manifest recibido" }, system_action: { type: "manifest", status: "Habitat conectado" } });
+					// ODI habla primero
+					if (!hasGreetedRef.current) {
+						hasGreetedRef.current = true;
+						setTimeout(() => {
+							pushEvent({ event_id: `greet_${Date.now()}`, ts: new Date().toISOString(), source: "agent", type: "state_change", voice: "ramona", mode: "care", payload: { text: "Hola. Estoy aqu\u00ed." }, system_action: { type: "greeting", status: "\uD83D\uDFE3 Ramona" } });
+							speakText("Hola. Estoy aqu\u00ed.", "ramona");
+						}, 800);
+						setTimeout(() => {
+							pushEvent({ event_id: `greet2_${Date.now()}`, ts: new Date().toISOString(), source: "agent", type: "state_change", voice: "ramona", mode: "care", payload: { text: "\u00bfQu\u00e9 necesitas?" }, system_action: { type: "greeting_follow", status: "\uD83D\uDFE3 Ramona" } });
+							speakText("\u00bfQu\u00e9 necesitas?", "ramona");
+						}, 3500);
+					}
+					return;
+				}
 				if (msg.type === "heartbeat_ack") { setHeartbeats((n) => n + 1); return; }
 				// Detect return_detected
 				if (msg.system_action?.type === "return_detected" || (msg.type === "state_change" && msg.payload?.resume)) {
@@ -342,7 +431,7 @@ export function AgentHabitat() {
 
 	useEffect(() => {
 		mountedRef.current = true; deviceRef.current = getDeviceId(); connect();
-		return () => { mountedRef.current = false; cleanup(); if (wsRef.current) { wsRef.current.close(); wsRef.current = null; } if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; } };
+		return () => { mountedRef.current = false; cleanup(); stopContinuousListening(); if (wsRef.current) { wsRef.current.close(); wsRef.current = null; } if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; } };
 	}, [connect, cleanup]);
 
 	// ── Phase styles ──
@@ -399,11 +488,27 @@ export function AgentHabitat() {
 						</p>
 						{phase === "live" && (
 							<>
-								<div className="flex gap-2 mt-3">
-									<button onClick={() => setInputMode("text")} className={`text-[10px] px-2.5 py-1 rounded-full border cursor-pointer transition-colors ${inputMode === "text" ? "bg-[#49c2ff22] border-[#49c2ff44] text-[#49c2ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f]"}`}>Texto</button>
-									<button onClick={() => setInputMode("voice")} className={`text-[10px] px-2.5 py-1 rounded-full border cursor-pointer transition-colors ${inputMode === "voice" ? "bg-[#ec489922] border-[#ec489944] text-[#ec4899]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f]"}`}>Voz</button>
+								<div className="flex gap-1.5 mt-3 flex-wrap justify-center">
+									{([
+										{ id: "voice" as InputMode, icon: "\uD83C\uDF99", label: "Voz" },
+										{ id: "text" as InputMode, icon: "\u2328", label: "Texto" },
+										{ id: "signs" as InputMode, icon: "\uD83E\uDD1F", label: "Se\u00f1as" },
+									] as const).map(door => (
+										<button key={door.id} onClick={() => {
+											if (door.id === "signs") return;
+											if (door.id === "voice" && inputMode !== "voice") { setInputMode("voice"); startContinuousListening(); }
+											else if (door.id === "text" && inputMode !== "text") { stopContinuousListening(); setInputMode("text"); }
+										}} className={`text-[10px] px-2.5 py-1.5 rounded-lg border cursor-pointer transition-all ${
+											inputMode === door.id ? "bg-[#49c2ff15] border-[#49c2ff44] text-[#dbe7ff]" : door.id === "signs" ? "bg-transparent border-[#1a2a42] text-[#3a4f6f] opacity-40 cursor-default" : "bg-transparent border-[#1a2a42] text-[#4a5f7f] hover:text-[#7f95bb]"
+										}`}>
+											<span className="text-sm">{door.icon}</span> {door.label}
+										</button>
+									))}
+									<button onClick={() => {}} className="text-[10px] px-2 py-1.5 rounded-lg border border-[#1a2a42] bg-transparent text-[#3a4f6f] opacity-40 cursor-default">
+										<span className="text-sm">&#x267F;</span> Adaptarme
+									</button>
 								</div>
-								<button onClick={() => setShowSidebar((v) => !v)} className="mt-3 text-[10px] text-[#49c2ff] hover:text-[#9be2ff] transition-colors cursor-pointer bg-transparent border-none">
+								<button onClick={() => setShowSidebar((v) => !v)} className="mt-2 text-[10px] text-[#49c2ff] hover:text-[#9be2ff] transition-colors cursor-pointer bg-transparent border-none">
 									{showSidebar ? "Ocultar panel" : "Panel"}
 								</button>
 							</>
@@ -415,15 +520,27 @@ export function AgentHabitat() {
 					<section className="flex flex-col max-h-[80vh]">
 						<h2 className="text-xs tracking-[0.18em] text-[#7f95bb] mb-3">EVENTOS</h2>
 
-						{/* Chat/Voice Input */}
+						{/* Voice / Text Input */}
 						{phase === "live" && (
 							<div className="mb-3">
 								{inputMode === "voice" ? (
-									<button onMouseDown={startListening} onMouseUp={stopListening} onTouchStart={startListening} onTouchEnd={stopListening}
-										className="w-full rounded-xl border px-4 py-3 text-sm cursor-pointer transition-colors"
-										style={{ background: isListening ? "#ff444415" : "#49c2ff08", borderColor: isListening ? "#ff444444" : "#35537c", color: isListening ? "#ff4444" : "#b6e5ff", animation: isListening ? "pulse 0.8s infinite" : "none" }}>
-										{isListening ? "Escuchando..." : "Mantener presionado para hablar"}
-									</button>
+									<div className="flex items-center justify-center gap-3 rounded-xl border border-[#35537c] bg-[rgba(7,18,33,0.7)] px-4 py-3">
+										<div className="flex gap-1 items-center">
+											{[0, 1, 2].map(i => (
+												<div key={i} className="w-1.5 h-1.5 rounded-full" style={{
+													background: isListening ? "#ec4899" : "#4a5f7f",
+													animation: isListening ? `pulse 1.2s ease-in-out ${i * 0.2}s infinite` : "none",
+												}} />
+											))}
+										</div>
+										<span className="text-sm italic" style={{ color: interimText ? "#dbe7ff" : isListening ? "#ec4899" : "#4a5f7f" }}>
+											{interimText || (isListening ? "Te escucho..." : "Activando...")}
+										</span>
+										<button onClick={() => { stopContinuousListening(); setInputMode("text"); }}
+											className="text-[10px] text-[#4a5f7f] bg-transparent border-none cursor-pointer hover:text-[#7f95bb]">
+											&#x2328; texto
+										</button>
+									</div>
 								) : (
 									<div className="flex gap-2">
 										<input ref={inputRef} type="text" autoComplete="off" placeholder="Escribe a ODI..." value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSend()} disabled={isSending}
