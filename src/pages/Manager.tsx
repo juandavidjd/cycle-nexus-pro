@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Separator } from "@/components/ui/separator";
 import {
   ArrowLeft, Store, Workflow, Cpu,
-  Activity, Server, ChevronRight, Shield,
+  Activity, Server, ChevronRight, Shield, Moon,
 } from "lucide-react";
 import {
   managerApi,
@@ -431,6 +431,142 @@ function TabGuardian() {
   );
 }
 
+// ── Tab: Nocturno (Self-Healing) ──
+function TabNocturno() {
+  const [auditData, setAuditData] = useState<Record<string, any> | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [healing, setHealing] = useState<string>("");
+  const [healResults, setHealResults] = useState<Record<string, any>>({});
+
+  const runAudit = async () => {
+    setLoading(true);
+    setAuditData(null);
+    setHealResults({});
+    try {
+      const d = await managerApi.nightlyAudit() as Record<string, any>;
+      setAuditData(d);
+    } catch {}
+    setLoading(false);
+  };
+
+  const healStore = async (storeId: string) => {
+    setHealing(storeId);
+    try {
+      const d = await managerApi.healStore(storeId) as Record<string, any>;
+      setHealResults(prev => ({ ...prev, [storeId]: d }));
+    } catch {}
+    setHealing("");
+  };
+
+  const sealedStores = new Set(["bara", "imbra"]);
+
+  return (
+    <div className="space-y-6">
+      <Card className="bg-card">
+        <CardContent className="p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold">Auditoría Nocturna</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                Ejecuta diagnóstico de 13 criterios en todas las tiendas configuradas
+              </p>
+            </div>
+            <button
+              onClick={runAudit}
+              disabled={loading}
+              className="px-4 py-2 text-xs font-semibold rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {loading ? "Auditando…" : "Ejecutar Auditoría"}
+            </button>
+          </div>
+
+          {auditData && (
+            <div className="flex gap-4 text-xs">
+              <span><strong className="text-foreground">{auditData.stores_total}</strong> tiendas</span>
+              <span className="text-emerald-400"><strong>{auditData.healthy}</strong> healthy</span>
+              <span className="text-yellow-400"><strong>{auditData.degraded}</strong> degraded</span>
+              <span className="text-red-400"><strong>{auditData.alert}</strong> alert</span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {auditData?.reports && (
+        <div className="space-y-3">
+          {(auditData.reports as Record<string, any>[]).map((r: Record<string, any>) => {
+            const sid = r.store_id as string;
+            const isSealed = sealedStores.has(sid);
+            const healed = healResults[sid];
+            const statusColors: Record<string, string> = {
+              healthy: "text-emerald-400",
+              degraded: "text-yellow-400",
+              alert: "text-red-400",
+            };
+
+            return (
+              <Card key={sid} className="bg-card">
+                <CardContent className="p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                        r.status === "healthy" ? "bg-emerald-500" :
+                        r.status === "alert" ? "bg-red-500" : "bg-yellow-500"
+                      }`} />
+                      <span className="text-sm font-semibold">{sid.toUpperCase()}</span>
+                      <span className={`text-xs font-semibold ${statusColors[r.status as string] || "text-muted-foreground"}`}>
+                        {(r.status as string || "").toUpperCase()}
+                      </span>
+                      {isSealed && (
+                        <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-400 border-blue-500/20">
+                          Solo branding
+                        </Badge>
+                      )}
+                    </div>
+                    {r.status !== "healthy" && (
+                      <button
+                        onClick={() => healStore(sid)}
+                        disabled={healing === sid}
+                        className="px-3 py-1 text-[10px] font-semibold rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 disabled:opacity-50"
+                      >
+                        {healing === sid ? "Sanando…" : "Sanar"}
+                      </button>
+                    )}
+                  </div>
+
+                  {(r.issues as string[])?.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {(r.issues as string[]).map((issue: string) => (
+                        <span key={issue} className="text-[10px] px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">
+                          {issue}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {healed && (
+                    <div className="text-[11px] mt-2 p-2 rounded bg-emerald-500/5 border border-emerald-500/10">
+                      <span className="text-emerald-400 font-semibold">
+                        {healed.status_before as string} → {healed.status_after as string}
+                      </span>
+                      {healed.sealed && <span className="text-blue-400 ml-2">(sealed — solo branding)</span>}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {!auditData && !loading && (
+        <p className="text-xs text-muted-foreground text-center py-8">
+          Presiona "Ejecutar Auditoría" para diagnosticar las tiendas configuradas
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Detail Sheets ──
 function StoreAuditSheet({ storeId, open, onClose }: { storeId: string; open: boolean; onClose: () => void }) {
   const [audit, setAudit] = useState<ManagerStoreAudit | null>(null);
@@ -640,6 +776,9 @@ const Manager = () => {
             <TabsTrigger value="guardian" className="text-xs gap-1.5">
               <Shield className="w-3.5 h-3.5" /> Guardian
             </TabsTrigger>
+            <TabsTrigger value="nocturno" className="text-xs gap-1.5">
+              <Moon className="w-3.5 h-3.5" /> Nocturno
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="tiendas">
@@ -656,6 +795,9 @@ const Manager = () => {
           </TabsContent>
           <TabsContent value="guardian">
             <TabGuardian />
+          </TabsContent>
+          <TabsContent value="nocturno">
+            <TabNocturno />
           </TabsContent>
         </Tabs>
       </div>

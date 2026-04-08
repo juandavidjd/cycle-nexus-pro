@@ -366,4 +366,21 @@ export const managerApi = {
 
   guardian: () =>
     managerFetch<Record<string, unknown>>('/guardian'),
+
+  nightlyAudit: () =>
+    managerFetch<Record<string, unknown>>('/nightly-audit', { method: 'POST' }),
+
+  healStore: (storeId: string) =>
+    managerFetch<Record<string, unknown>>(`/stores/${storeId}/heal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm: true }),
+    }),
+
+  nightlyHeal: () =>
+    managerFetch<Record<string, unknown>>('/nightly-heal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm: true }),
+    }),
 };
