@@ -77,10 +77,26 @@ export function AgentHabitat() {
 	const [heartbeats, setHeartbeats] = useState(0);
 	const [wsUrlIdx, setWsUrlIdx] = useState(0);
 	const [inputMode, setInputMode_] = useState<InputMode>("text");
-	const setInputMode = useCallback((m: InputMode) => { setInputMode_(m); inputModeRef.current = m; }, []);
+	const setInputMode = useCallback((m: InputMode) => {
+		setInputMode_(m); inputModeRef.current = m;
+		if (typeof window !== "undefined") localStorage.setItem("odi_input_mode", m);
+	}, []);
+	// Restore persisted mode on mount
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		const saved = localStorage.getItem("odi_input_mode");
+		if (saved === "voice" || saved === "text") { setInputMode_(saved); inputModeRef.current = saved; }
+	}, []);
 	const [chatInput, setChatInput] = useState("");
 	const [isSending, setIsSending] = useState(false);
 	const [showSidebar, setShowSidebar] = useState(false);
+	const [isMobile, setIsMobile] = useState(false);
+	useEffect(() => {
+		const check = () => setIsMobile(window.innerWidth < 768);
+		check();
+		window.addEventListener("resize", check);
+		return () => window.removeEventListener("resize", check);
+	}, []);
 	const [sideTab, setSideTab] = useState<SideTab>("flows");
 
 	// ── Live data from backend ──
@@ -114,6 +130,7 @@ export function AgentHabitat() {
 	const mountedRef = useRef(true);
 	const urlIdxRef = useRef(0);
 	const inputRef = useRef<HTMLInputElement>(null);
+	const lastManifestRef = useRef("");
 
 	// ── pushEvent ──
 	const pushEvent = useCallback((ev: AgentEvent) => {
@@ -127,18 +144,48 @@ export function AgentHabitat() {
 		reconRef.current = null;
 	}, []);
 
+	// === Autoplay gate (persistent per session) ===
+	const [userHasInteracted, setUserHasInteracted] = useState(false);
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		if (sessionStorage.getItem("odi_audio_unlocked") === "true") {
+			setUserHasInteracted(true);
+			return;
+		}
+		const unlock = () => {
+			setUserHasInteracted(true);
+			sessionStorage.setItem("odi_audio_unlocked", "true");
+		};
+		window.addEventListener("pointerdown", unlock, { once: true });
+		window.addEventListener("keydown", unlock, { once: true });
+		return () => { window.removeEventListener("pointerdown", unlock); window.removeEventListener("keydown", unlock); };
+	}, []);
+
 	// === TTS ===
 	const audioRef = useRef<HTMLAudioElement | null>(null);
+	const isPlayingRef = useRef(false);
 	const [isSpeaking, setIsSpeaking] = useState(false);
 
 	const speakText = useCallback(async (text: string, voice: string = "ramona") => {
-		if (isSpeaking || !text) return;
+		if (!userHasInteracted || isPlayingRef.current || !text) return;
 		const truncated = text.length > 500 ? text.slice(0, 497) + "..." : text;
+		// Track what ODI says for anti-echo filter
+		recentOdiPhrasesRef.current = [...recentOdiPhrasesRef.current.slice(-5), truncated.toLowerCase()];
 		// Echo prevention: pause STT while speaking
 		const wasListening = !!recognitionRef.current;
 		if (wasListening) { try { recognitionRef.current?.stop(); } catch {} }
+		// Cleanup previous audio
+		if (audioRef.current) {
+			audioRef.current.pause();
+			audioRef.current.currentTime = 0;
+			audioRef.current.onended = null;
+			audioRef.current.onerror = null;
+			audioRef.current.src = "";
+		}
+		isPlayingRef.current = false;
 		try {
 			setIsSpeaking(true);
+			isPlayingRef.current = true;
 			const resp = await fetch(SPEAK_URL, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -147,32 +194,33 @@ export function AgentHabitat() {
 			if (resp.ok) {
 				const blob = await resp.blob();
 				const url = URL.createObjectURL(blob);
-				if (audioRef.current) { audioRef.current.pause(); URL.revokeObjectURL(audioRef.current.src); }
-				const audio = new Audio(url);
+				const audio = audioRef.current || new Audio();
 				audioRef.current = audio;
 				audio.onended = () => {
-					setIsSpeaking(false); URL.revokeObjectURL(url);
-					// Resume STT after speaking if in voice mode
+					isPlayingRef.current = false; setIsSpeaking(false); URL.revokeObjectURL(url);
 					if (inputModeRef.current === "voice" && wasListening) {
-						setTimeout(() => { try { recognitionRef.current?.start(); } catch {} }, 300);
+						setTimeout(() => { try { recognitionRef.current?.start(); } catch {} }, 500);
 					}
 				};
 				audio.onerror = () => {
-					setIsSpeaking(false);
+					isPlayingRef.current = false; setIsSpeaking(false);
 					if (inputModeRef.current === "voice" && wasListening) {
-						setTimeout(() => { try { recognitionRef.current?.start(); } catch {} }, 300);
+						setTimeout(() => { try { recognitionRef.current?.start(); } catch {} }, 500);
 					}
 				};
+				audio.src = url;
 				await audio.play();
-			} else { setIsSpeaking(false); }
-		} catch { setIsSpeaking(false); }
-	}, [isSpeaking]);
+			} else { isPlayingRef.current = false; setIsSpeaking(false); }
+		} catch { isPlayingRef.current = false; setIsSpeaking(false); }
+	}, [userHasInteracted]);
 
 	// === STT ===
 	const recognitionRef = useRef<any>(null);
 	const [isListening, setIsListening] = useState(false);
 	const [interimText, setInterimText] = useState("");
-	const hasGreetedRef = useRef(false);
+	const greetKey = `odi_greeted_${sessionRef.current}`;
+	const hasGreetedRef = useRef(typeof window !== "undefined" && sessionStorage.getItem(`odi_greeted_${sessionRef.current}`) === "true");
+	const recentOdiPhrasesRef = useRef<string[]>([]);
 	const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const inputModeRef = useRef<InputMode>("text");
@@ -203,15 +251,8 @@ export function AgentHabitat() {
 
 	const resetIdleTimer = useCallback(() => {
 		if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-		if (inputModeRef.current === "voice") {
-			idleTimerRef.current = setTimeout(() => {
-				const prompts = ["¿En qué puedo ayudarte?", "Cuéntame.", "¿Necesitas algo?", "Estoy aquí."];
-				const text = prompts[Math.floor(Math.random() * prompts.length)];
-				pushEvent({ event_id: `idle_${Date.now()}`, ts: new Date().toISOString(), source: "agent", type: "state_change", voice: "ramona", mode: "care", payload: { text }, system_action: { type: "idle_push" } });
-				speakText(text, "ramona");
-			}, 10000);
-		}
-	}, [pushEvent, speakText]);
+		// idle_push disabled until echo prevention is stable
+	}, []);
 
 	const startContinuousListening = useCallback(() => {
 		const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -236,12 +277,19 @@ export function AgentHabitat() {
 			setInterimText(currentTranscript);
 			if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
 			silenceTimerRef.current = setTimeout(() => {
-				if (currentTranscript.trim()) {
-					handleSend(currentTranscript.trim());
-					currentTranscript = "";
-					setInterimText("");
-					resetIdleTimer();
-				}
+				const t = currentTranscript.trim();
+				if (!t) return;
+				// Noise filter: reject garbage STT
+				const alphaRatio = (t.replace(/[^a-záéíóúñü]/gi, "").length) / Math.max(t.length, 1);
+				if (t.length < 3 || alphaRatio < 0.5) { currentTranscript = ""; setInterimText(""); return; }
+				// Anti-echo: reject if matches recent ODI phrase
+				const lower = t.toLowerCase();
+				const isEcho = recentOdiPhrasesRef.current.some(p => p.includes(lower) || lower.includes(p));
+				if (isEcho) { currentTranscript = ""; setInterimText(""); return; }
+				handleSend(t);
+				currentTranscript = "";
+				setInterimText("");
+				resetIdleTimer();
 			}, 2500);
 		};
 		recognition.onend = () => {
@@ -266,6 +314,26 @@ export function AgentHabitat() {
 		setIsListening(false);
 		setInterimText("");
 	}, []);
+
+	// === OC-05: Ctrl+M toggle mic without touch (Accesibilidad J3) ===
+	useEffect(() => {
+		const handler = (e: KeyboardEvent) => {
+			if ((e.ctrlKey || e.metaKey) && e.key === "m") {
+				e.preventDefault();
+				if (inputModeRef.current === "voice") {
+					stopContinuousListening();
+					setInputMode("text");
+				} else {
+					setInputMode("voice");
+					startContinuousListening();
+				}
+			}
+		};
+		window.addEventListener("keydown", handler);
+		return () => window.removeEventListener("keydown", handler);
+	}, [startContinuousListening, stopContinuousListening, setInputMode]);
+
+	// Wake word disabled until echo prevention is stable
 
 	// === Load live manifest ===
 	useEffect(() => {
@@ -393,18 +461,22 @@ export function AgentHabitat() {
 				const msg = JSON.parse(e.data);
 				if (msg.type === "manifest") {
 					setPhase("live");
-					pushEvent({ event_id: msg.session_id || "manifest", ts: msg.ts || new Date().toISOString(), source: "agent", type: "manifest", payload: { text: "Manifest recibido" }, system_action: { type: "manifest", status: "Habitat conectado" } });
-					// ODI habla primero
+					const dedupKey = msg.manifest?.version || msg.ts || "";
+					const isDupe = dedupKey && dedupKey === lastManifestRef.current;
+					lastManifestRef.current = dedupKey;
+					if (!isDupe) {
+						pushEvent({ event_id: msg.session_id || "manifest", ts: msg.ts || new Date().toISOString(), source: "agent", type: "manifest", payload: { text: "Manifest recibido" }, system_action: { type: "manifest", status: "Habitat conectado" } });
+					}
+					// ODI greets — text only, once per session
 					if (!hasGreetedRef.current) {
 						hasGreetedRef.current = true;
+						try { sessionStorage.setItem(greetKey, "true"); } catch {}
 						setTimeout(() => {
 							pushEvent({ event_id: `greet_${Date.now()}`, ts: new Date().toISOString(), source: "agent", type: "state_change", voice: "ramona", mode: "care", payload: { text: "Hola. Estoy aqu\u00ed." }, system_action: { type: "greeting", status: "\uD83D\uDFE3 Ramona" } });
-							speakText("Hola. Estoy aqu\u00ed.", "ramona");
 						}, 800);
 						setTimeout(() => {
 							pushEvent({ event_id: `greet2_${Date.now()}`, ts: new Date().toISOString(), source: "agent", type: "state_change", voice: "ramona", mode: "care", payload: { text: "\u00bfQu\u00e9 necesitas?" }, system_action: { type: "greeting_follow", status: "\uD83D\uDFE3 Ramona" } });
-							speakText("\u00bfQu\u00e9 necesitas?", "ramona");
-						}, 3500);
+						}, 3000);
 					}
 					return;
 				}
@@ -450,6 +522,8 @@ export function AgentHabitat() {
 	const flowsByCategory: Record<string, any[]> = {};
 	flows.forEach((f) => { if (!flowsByCategory[f.category]) flowsByCategory[f.category] = []; flowsByCategory[f.category].push(f); });
 
+	const showDebug = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("debug");
+
 	return (
 		<main className="min-h-screen bg-[#03070d] text-[#dbe7ff] font-sans">
 			<div className="max-w-[1200px] mx-auto min-h-screen px-4 py-5">
@@ -473,11 +547,11 @@ export function AgentHabitat() {
 				</header>
 
 				{/* ── Grid ── */}
-				<div className="grid gap-6" style={{ gridTemplateColumns: showSidebar ? "180px 1fr 300px" : "180px 1fr" }}>
+				<div className="grid gap-6" style={{ gridTemplateColumns: isMobile ? "1fr" : showSidebar ? "180px 1fr 300px" : "180px 1fr" }}>
 
 					{/* ── Flame column ── */}
-					<section className="flex flex-col items-center pt-8">
-						<div className="w-28 h-28 rounded-full" style={{
+					<section className={`flex flex-col items-center ${isMobile ? "pt-2 flex-row gap-3 justify-center" : "pt-8"}`}>
+						<div className={isMobile ? "w-16 h-16 rounded-full" : "w-28 h-28 rounded-full"} style={{
 							background: isSpeaking ? "radial-gradient(circle at 50% 35%, #ec4899 0%, #be185d 40%, #6f6dff 70%, transparent 100%)" : flameGradient[phase],
 							boxShadow: isSpeaking ? "0 0 40px #ec489988, inset 0 0 30px #ec489944" : flameShadow[phase],
 							animation: phase === "live" ? "breathe 4s ease-in-out infinite" : "none",
@@ -517,7 +591,7 @@ export function AgentHabitat() {
 					</section>
 
 					{/* ── Events + Input + Flow player ── */}
-					<section className="flex flex-col max-h-[80vh]">
+					<section className={`flex flex-col ${isMobile ? "min-h-0 flex-1" : "max-h-[80vh]"}`}>
 						<h2 className="text-xs tracking-[0.18em] text-[#7f95bb] mb-3">EVENTOS</h2>
 
 						{/* Voice / Text Input */}
@@ -663,7 +737,7 @@ export function AgentHabitat() {
 					</section>
 
 					{/* ── Sidebar: Flows / Manifest / Stats ── */}
-					{showSidebar && (
+					{showSidebar && !isMobile && (
 						<aside className="overflow-y-auto max-h-[80vh] rounded-lg border border-[#1a2a42] bg-[#0a1628] p-3">
 							{/* Tabs */}
 							<div className="flex gap-1 mb-3">
@@ -885,7 +959,35 @@ export function AgentHabitat() {
 						</aside>
 					)}
 				</div>
+
+				{/* Mobile sidebar — inline below grid */}
+				{showSidebar && isMobile && (
+					<div className="mt-4 rounded-lg border border-[#1a2a42] bg-[#0a1628] p-3 overflow-y-auto max-h-[60vh]">
+						<div className="flex gap-1 mb-3">
+							{(["flows", "manifest", "stats"] as SideTab[]).map((t) => (
+								<button key={t} onClick={() => setSideTab(t)}
+									className={`text-[10px] px-2 py-1 rounded-full border cursor-pointer transition-colors ${sideTab === t ? "bg-[#49c2ff22] border-[#49c2ff44] text-[#49c2ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f]"}`}>
+									{t === "flows" ? `Flujos` : t === "manifest" ? "Manifest" : "Stats"}
+								</button>
+							))}
+							<button onClick={() => setShowSidebar(false)} className="ml-auto text-[10px] text-[#4a5f7f] bg-transparent border-none cursor-pointer">&#x2715;</button>
+						</div>
+						<p className="text-[10px] text-[#4a5f7f]">
+							{sideTab === "manifest" && liveManifest ? `${liveManifest.services_alive}/${liveManifest.services_total} servicios · ${liveManifest.stores_active || 0} tiendas` : sideTab === "stats" && stats ? `${stats.events_total} events · ${stats.sessions_active} active` : `${flows.length} flujos`}
+						</p>
+					</div>
+				)}
 			</div>
+			{showDebug && (
+				<div className="fixed bottom-0 left-0 right-0 bg-black/80 text-[10px] text-gray-400 px-2 py-1 flex gap-4 z-50 font-mono">
+					<span>WS: {phase === "live" ? "connected" : phase}</span>
+					<span>Mode: {inputMode}</span>
+					<span>Audio: {userHasInteracted ? "unlocked" : "locked"}</span>
+					<span>Greeted: {hasGreetedRef.current ? "yes" : "no"}</span>
+					<span>Speaking: {isSpeaking ? "yes" : "no"}</span>
+					<span>Listening: {isListening ? "yes" : "no"}</span>
+				</div>
+			)}
 		</main>
 	);
 }
