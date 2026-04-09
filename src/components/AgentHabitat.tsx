@@ -132,9 +132,20 @@ export function AgentHabitat() {
 	const inputRef = useRef<HTMLInputElement>(null);
 	const lastManifestRef = useRef("");
 
-	// ── pushEvent ──
+	// ── pushEvent (with dedup) ──
 	const pushEvent = useCallback((ev: AgentEvent) => {
-		setEvents((prev) => [ev, ...prev].slice(0, MAX_EVENTS));
+		setEvents((prev) => {
+			// Dedup: reject if same source + text within last 5 seconds
+			const txt = ev.payload?.text;
+			if (txt && prev.length > 0) {
+				const recent = prev[0];
+				if (recent.source === ev.source && recent.payload?.text === txt) {
+					const gap = new Date(ev.ts).getTime() - new Date(recent.ts).getTime();
+					if (Math.abs(gap) < 5000) return prev;
+				}
+			}
+			return [ev, ...prev].slice(0, MAX_EVENTS);
+		});
 	}, []);
 
 	const cleanup = useCallback(() => {
@@ -199,13 +210,13 @@ export function AgentHabitat() {
 				audio.onended = () => {
 					isPlayingRef.current = false; setIsSpeaking(false); URL.revokeObjectURL(url);
 					if (inputModeRef.current === "voice" && wasListening) {
-						setTimeout(() => { try { recognitionRef.current?.start(); } catch {} }, 500);
+						setTimeout(() => { if (!isPlayingRef.current) { try { recognitionRef.current?.start(); setIsListening(true); } catch {} } }, 800);
 					}
 				};
 				audio.onerror = () => {
 					isPlayingRef.current = false; setIsSpeaking(false);
 					if (inputModeRef.current === "voice" && wasListening) {
-						setTimeout(() => { try { recognitionRef.current?.start(); } catch {} }, 500);
+						setTimeout(() => { if (!isPlayingRef.current) { try { recognitionRef.current?.start(); setIsListening(true); } catch {} } }, 800);
 					}
 				};
 				audio.src = url;
@@ -267,6 +278,8 @@ export function AgentHabitat() {
 		recognition.interimResults = true;
 		let currentTranscript = "";
 		recognition.onresult = (event: any) => {
+			// Hard mute: ignore ALL STT input while TTS is playing
+			if (isPlayingRef.current) return;
 			let final = "";
 			let interim = "";
 			for (let i = 0; i < event.results.length; i++) {
@@ -277,6 +290,7 @@ export function AgentHabitat() {
 			setInterimText(currentTranscript);
 			if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
 			silenceTimerRef.current = setTimeout(() => {
+				if (isPlayingRef.current) return; // double-check: don't send during TTS
 				const t = currentTranscript.trim();
 				if (!t) return;
 				// Noise filter: reject garbage STT
@@ -284,15 +298,21 @@ export function AgentHabitat() {
 				if (t.length < 3 || alphaRatio < 0.5) { currentTranscript = ""; setInterimText(""); return; }
 				// Anti-echo: reject if matches recent ODI phrase
 				const lower = t.toLowerCase();
-				const isEcho = recentOdiPhrasesRef.current.some(p => p.includes(lower) || lower.includes(p));
+				const isEcho = recentOdiPhrasesRef.current.some(p => {
+					const a = p.replace(/[^a-záéíóúñü\s]/gi, "").trim();
+					const b = lower.replace(/[^a-záéíóúñü\s]/gi, "").trim();
+					if (!a || !b) return false;
+					return a.includes(b) || b.includes(a);
+				});
 				if (isEcho) { currentTranscript = ""; setInterimText(""); return; }
 				handleSend(t);
 				currentTranscript = "";
 				setInterimText("");
-				resetIdleTimer();
 			}, 2500);
 		};
 		recognition.onend = () => {
+			// NEVER auto-restart while TTS is playing — this is the echo root cause
+			if (isPlayingRef.current) { setIsListening(false); return; }
 			if (inputModeRef.current === "voice") {
 				try { recognition.start(); } catch {}
 			} else { setIsListening(false); }
