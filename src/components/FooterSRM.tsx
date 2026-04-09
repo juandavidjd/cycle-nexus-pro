@@ -55,6 +55,12 @@ export function FooterSRM({ className }: FooterSRMProps) {
           <p className="text-center text-xs text-muted-foreground">
             © 2026 SRM — Somos Repuestos Motos. Todos los derechos reservados.
           </p>
+          <p className="text-center text-sm text-muted-foreground mt-4 pt-4 border-t border-steel-700">
+            Un proyecto del ecosistema{" "}
+            <a href="https://ecosistema-adsi.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground underline">
+              ADSI-ODI
+            </a>
+          </p>
         </div>
       </div>
     </footer>
