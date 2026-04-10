@@ -14,7 +14,7 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/srm-icons/favicon-16x16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/srm-icons/apple-touch-icon.png" />
     <link rel="manifest" href="/srm-icons/site.webmanifest" />
-    <meta name="theme-color" content="#1A1A1A" />
+    <meta name="theme-color" content="#03070d" />
 
     <!-- Open Graph -->
     
@@ -37,5 +37,10 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      }
+    </script>
   </body>
 </html>
