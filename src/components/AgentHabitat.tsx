@@ -93,15 +93,16 @@ function DegradedCard({ name, data }: { name: string; data: any }) {
 	const status = data?.status || "unavailable";
 	const error = data?._error || "";
 	return (
-		<div className="rounded-lg p-2 border border-[#ff444422]" style={{ background: "#ff444408" }}>
+		<div className="rounded-lg p-3 border-2 border-[#ff444466] animate-pulse" style={{ background: "#ff444418" }}>
 			<div className="flex items-center justify-between">
 				<div className="flex items-center gap-1.5">
-					<span className="text-xs font-semibold text-[#ff4444]">{name}</span>
-					<span className="text-[9px] px-1 rounded bg-[#ff444415] text-[#ff4444]">{status}</span>
+					<span className="text-sm">&#x26A0;</span>
+					<span className="text-xs font-bold text-[#ff4444]">{name}</span>
+					<span className="text-[9px] px-1.5 py-0.5 rounded bg-[#ff444430] text-[#ff4444] font-semibold">{status}</span>
 				</div>
-				{data?._fetched_at && <span className="text-[8px] text-[#4a5f7f]">{timeAgo(data._fetched_at)}</span>}
+				{data?._fetched_at && <span className="text-[8px] text-[#ff8888]">{timeAgo(data._fetched_at)}</span>}
 			</div>
-			{error && <div className="text-[8px] text-[#ff4444] mt-0.5 opacity-60">{error}</div>}
+			{error && <div className="text-[9px] text-[#ff6666] mt-1">{error.slice(0, 80)}</div>}
 		</div>
 	);
 }
