@@ -253,7 +253,7 @@ export function AgentHabitat() {
 				const responseText = data.response || "";
 				const voice = data.voice || "ramona";
 				pushEvent({ event_id: `chat_${Date.now()}`, ts: new Date().toISOString(), source: "chat", type: "message", voice, mode: data.mode || "commerce", payload: { text: responseText } });
-				if (inputMode === "voice" && responseText) speakText(responseText, voice);
+				if (inputModeRef.current === "voice" && responseText) speakText(responseText, voice);
 			}
 		} catch {
 			pushEvent({ event_id: `err_${Date.now()}`, ts: new Date().toISOString(), source: "agent", type: "error", payload: { text: "No pude conectar con el chat" } });
