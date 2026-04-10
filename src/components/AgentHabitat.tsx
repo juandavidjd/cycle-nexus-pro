@@ -276,27 +276,41 @@ export function AgentHabitat() {
 		recognition.lang = "es-CO";
 		recognition.continuous = true;
 		recognition.interimResults = true;
-		let currentTranscript = "";
+		let pendingFinal = "";
 		recognition.onresult = (event: any) => {
 			// Hard mute: ignore ALL STT input while TTS is playing
 			if (isPlayingRef.current) return;
-			let final = "";
-			let interim = "";
-			for (let i = 0; i < event.results.length; i++) {
-				if (event.results[i].isFinal) final += event.results[i][0].transcript + " ";
-				else interim += event.results[i][0].transcript;
+
+			let newFinal = "";
+			let currentInterim = "";
+			// Only process NEW results from resultIndex, not all from 0
+			for (let i = event.resultIndex; i < event.results.length; i++) {
+				if (event.results[i].isFinal) {
+					newFinal += event.results[i][0].transcript + " ";
+				} else {
+					currentInterim += event.results[i][0].transcript;
+				}
 			}
-			currentTranscript = (final + interim).trim();
-			setInterimText(currentTranscript);
+
+			// Accumulate only confirmed final text
+			if (newFinal.trim()) {
+				pendingFinal += " " + newFinal.trim();
+				pendingFinal = pendingFinal.trim();
+			}
+
+			// Show interim as grey preview, final as solid
+			setInterimText(pendingFinal + (currentInterim ? " " + currentInterim : ""));
+
+			// Reset silence timer — only fires with pendingFinal (confirmed text)
 			if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
 			silenceTimerRef.current = setTimeout(() => {
-				if (isPlayingRef.current) return; // double-check: don't send during TTS
-				const t = currentTranscript.trim();
+				if (isPlayingRef.current) return;
+				const t = pendingFinal.trim();
 				if (!t) return;
-				// Noise filter: reject garbage STT
+				// Noise filter
 				const alphaRatio = (t.replace(/[^a-záéíóúñü]/gi, "").length) / Math.max(t.length, 1);
-				if (t.length < 3 || alphaRatio < 0.5) { currentTranscript = ""; setInterimText(""); return; }
-				// Anti-echo: reject if matches recent ODI phrase
+				if (t.length < 3 || alphaRatio < 0.5) { pendingFinal = ""; setInterimText(""); return; }
+				// Anti-echo
 				const lower = t.toLowerCase();
 				const isEcho = recentOdiPhrasesRef.current.some(p => {
 					const a = p.replace(/[^a-záéíóúñü\s]/gi, "").trim();
@@ -304,9 +318,9 @@ export function AgentHabitat() {
 					if (!a || !b) return false;
 					return a.includes(b) || b.includes(a);
 				});
-				if (isEcho) { currentTranscript = ""; setInterimText(""); return; }
+				if (isEcho) { pendingFinal = ""; setInterimText(""); return; }
 				handleSend(t);
-				currentTranscript = "";
+				pendingFinal = "";
 				setInterimText("");
 			}, 2500);
 		};
