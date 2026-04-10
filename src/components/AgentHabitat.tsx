@@ -1127,6 +1127,104 @@ export function AgentHabitat() {
 										</div>
 									)}
 
+									{/* === TIENDAS DEPTH === */}
+									{liveManifest?.stores_depth?.stores?.length > 0 && (
+										<div className="rounded-lg p-2 border border-[#9c27b022]" style={{ background: "#9c27b008" }}>
+											<div className="flex items-center gap-1.5 mb-1">
+												<span className="text-xs font-semibold text-[#9c27b0]">TIENDAS</span>
+												<span className="text-[9px] px-1 rounded bg-[#9c27b015] text-[#9c27b0]">
+													{liveManifest.stores_depth.total} snapshots
+												</span>
+											</div>
+											<div className="space-y-0.5">
+												{liveManifest.stores_depth.stores.map((s: any) => (
+													<div key={s.store_id} className="flex items-center justify-between text-[9px]">
+														<span className="text-[#8ca0c6] font-medium">{s.store_id?.toUpperCase()}</span>
+														<div className="flex items-center gap-1.5">
+															<span className={`px-1 rounded ${s.grade === 'A+' ? 'bg-[#3af08f15] text-[#3af08f]' : s.grade === 'A' ? 'bg-[#49c2ff15] text-[#49c2ff]' : 'bg-[#ffcc0015] text-[#ffcc00]'}`}>
+																{s.grade || '—'}
+															</span>
+															<span className="text-[#4a5f7f]">{s.active} act</span>
+															<span className="text-[#4a5f7f]">img:{s.image_coverage}%</span>
+															{s.gaps > 0 && <span className="text-[#ff9800]">{s.gaps} gaps</span>}
+														</div>
+													</div>
+												))}
+											</div>
+										</div>
+									)}
+
+									{/* === SELF-HEALING === */}
+									{liveManifest?.self_healing?.status === "operativo" && (
+										<div className="rounded-lg p-2 border border-[#00bcd422]" style={{ background: "#00bcd408" }}>
+											<div className="flex items-center justify-between">
+												<div className="flex items-center gap-1.5">
+													<span className="text-xs font-semibold text-[#00bcd4]">SELF-HEALING</span>
+												</div>
+												<span className="text-[10px] text-[#4a5f7f]">
+													{liveManifest.self_healing.gaps_total || 0} gaps detectados
+												</span>
+											</div>
+											{liveManifest.self_healing.stores?.length > 0 && (
+												<div className="space-y-0.5 mt-1">
+													{liveManifest.self_healing.stores.map((s: any) => (
+														<div key={s.store_id} className="flex items-center justify-between text-[9px]">
+															<span className="text-[#8ca0c6]">{s.store_id?.toUpperCase()}</span>
+															<div className="flex items-center gap-1.5">
+																<span className="text-[#4a5f7f]">{s.grade}</span>
+																<span className="text-[#ff9800]">{s.gaps_count} gaps</span>
+															</div>
+														</div>
+													))}
+												</div>
+											)}
+										</div>
+									)}
+
+									{/* === RADAR LINK === */}
+									<div className="rounded-lg p-2 border border-[#f9731622]" style={{ background: "#f9731608" }}>
+										<div className="flex items-center justify-between">
+											<div className="flex items-center gap-1.5">
+												<span className="text-xs font-semibold text-[#f97316]">RADAR</span>
+												<span className="text-[9px] px-1 rounded bg-[#f9731615] text-[#f97316]">v3.2.0</span>
+											</div>
+											<a href="https://radar.liveodi.com" target="_blank" rel="noopener noreferrer"
+												className="text-[9px] px-1.5 py-0.5 rounded bg-[#f9731620] text-[#f97316] hover:bg-[#f9731630] transition-colors">
+												Abrir Panel
+											</a>
+										</div>
+										<div className="text-[9px] text-[#4a5f7f] mt-0.5">
+											15 disciplinas · 33 juegos · guardian verde
+										</div>
+									</div>
+
+									{/* === LOG STATS === */}
+									{liveManifest?.log_stats?.total_logs > 0 && (
+										<div className="rounded-lg p-2 border border-[#78909c22]" style={{ background: "#78909c08" }}>
+											<div className="flex items-center justify-between">
+												<div className="flex items-center gap-1.5">
+													<span className="text-xs font-semibold text-[#78909c]">LOGS</span>
+													<span className="text-[9px] px-1 rounded bg-[#78909c15] text-[#78909c]">
+														{liveManifest.log_stats.active_logs}/{liveManifest.log_stats.total_logs} activos
+													</span>
+												</div>
+												<span className="text-[10px] text-[#4a5f7f]">
+													{liveManifest.log_stats.total_size_kb}KB
+												</span>
+											</div>
+											<div className="text-[9px] text-[#4a5f7f] mt-0.5">
+												{liveManifest.log_stats.total_lines} líneas registradas
+											</div>
+											<div className="flex flex-wrap gap-1 mt-1">
+												{liveManifest.log_stats.logs && Object.entries(liveManifest.log_stats.logs).map(([name, info]: [string, any]) => (
+													<span key={name} className={`text-[7px] px-1 py-0.5 rounded ${info.active ? 'bg-[#3af08f15] text-[#3af08f]' : 'bg-[#1a2a42] text-[#4a5f7f]'}`}>
+														{name}
+													</span>
+												))}
+											</div>
+										</div>
+									)}
+
 									<div className="text-[10px] text-[#4a5f7f] pt-2 border-t border-[#1a2a42]">
 										<p>v{liveManifest.version} · {liveManifest.flows_available} flows</p>
 										<p>device: {deviceRef.current.slice(0, 16)}</p>
