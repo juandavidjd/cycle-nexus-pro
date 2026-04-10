@@ -610,8 +610,8 @@ export function AgentHabitat() {
 									] as const).map(door => (
 										<button key={door.id} onClick={() => {
 											if (door.id === "signs") return;
-											if (door.id === "voice" && inputMode !== "voice") { setInputMode("voice"); startContinuousListening(); }
-											else if (door.id === "text" && inputMode !== "text") { stopContinuousListening(); setInputMode("text"); }
+											if (door.id === "voice") { setInputMode("voice"); if (!isListening) startContinuousListening(); }
+											else if (door.id === "text") { stopContinuousListening(); setInputMode("text"); }
 										}} className={`text-[10px] px-2.5 py-1.5 rounded-lg border cursor-pointer transition-all ${
 											inputMode === door.id ? "bg-[#49c2ff15] border-[#49c2ff44] text-[#dbe7ff]" : door.id === "signs" ? "bg-transparent border-[#1a2a42] text-[#3a4f6f] opacity-40 cursor-default" : "bg-transparent border-[#1a2a42] text-[#4a5f7f] hover:text-[#7f95bb]"
 										}`}>
