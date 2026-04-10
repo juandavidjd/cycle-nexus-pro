@@ -276,53 +276,52 @@ export function AgentHabitat() {
 		recognition.lang = "es-CO";
 		recognition.continuous = true;
 		recognition.interimResults = true;
-		let pendingFinal = "";
 		recognition.onresult = (event: any) => {
 			// Hard mute: ignore ALL STT input while TTS is playing
 			if (isPlayingRef.current) return;
 
-			let newFinal = "";
+			// Snapshot: read ALL results, separate final from interim
+			// On mobile Chrome, each isFinal contains full accumulated text
+			// so we DON'T accumulate — we rebuild from the full results array
+			let allFinal = "";
 			let currentInterim = "";
-			// Only process NEW results from resultIndex, not all from 0
-			for (let i = event.resultIndex; i < event.results.length; i++) {
+			for (let i = 0; i < event.results.length; i++) {
 				if (event.results[i].isFinal) {
-					newFinal += event.results[i][0].transcript + " ";
+					allFinal += event.results[i][0].transcript + " ";
 				} else {
 					currentInterim += event.results[i][0].transcript;
 				}
 			}
+			const pendingFinal = allFinal.trim();
 
-			// Accumulate only confirmed final text
-			if (newFinal.trim()) {
-				pendingFinal += " " + newFinal.trim();
-				pendingFinal = pendingFinal.trim();
-			}
-
-			// Show interim as grey preview, final as solid
+			// Show: final text + interim preview
 			setInterimText(pendingFinal + (currentInterim ? " " + currentInterim : ""));
 
-			// Reset silence timer — only fires with pendingFinal (confirmed text)
+			// Reset silence timer — sends pendingFinal (snapshot of all isFinal text)
 			if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-			silenceTimerRef.current = setTimeout(() => {
-				if (isPlayingRef.current) return;
-				const t = pendingFinal.trim();
-				if (!t) return;
-				// Noise filter
-				const alphaRatio = (t.replace(/[^a-záéíóúñü]/gi, "").length) / Math.max(t.length, 1);
-				if (t.length < 3 || alphaRatio < 0.5) { pendingFinal = ""; setInterimText(""); return; }
-				// Anti-echo
-				const lower = t.toLowerCase();
-				const isEcho = recentOdiPhrasesRef.current.some(p => {
-					const a = p.replace(/[^a-záéíóúñü\s]/gi, "").trim();
-					const b = lower.replace(/[^a-záéíóúñü\s]/gi, "").trim();
-					if (!a || !b) return false;
-					return a.includes(b) || b.includes(a);
-				});
-				if (isEcho) { pendingFinal = ""; setInterimText(""); return; }
-				handleSend(t);
-				pendingFinal = "";
-				setInterimText("");
-			}, 2500);
+			if (pendingFinal || currentInterim) {
+				silenceTimerRef.current = setTimeout(() => {
+					if (isPlayingRef.current) return;
+					// Re-read all final results at send time for freshest state
+					let sendText = "";
+					for (let i = 0; i < event.results.length; i++) {
+						if (event.results[i].isFinal) sendText += event.results[i][0].transcript + " ";
+					}
+					const t = sendText.trim();
+					if (!t || t.length < 3) { setInterimText(""); return; }
+					// Anti-echo
+					const lower = t.toLowerCase();
+					const isEcho = recentOdiPhrasesRef.current.some(p => {
+						const a = p.replace(/[^a-záéíóúñü\s]/gi, "").trim();
+						const b = lower.replace(/[^a-záéíóúñü\s]/gi, "").trim();
+						if (!a || !b) return false;
+						return a.includes(b) || b.includes(a);
+					});
+					if (isEcho) { setInterimText(""); return; }
+					handleSend(t);
+					setInterimText("");
+				}, 2500);
+			}
 		};
 		recognition.onend = () => {
 			// NEVER auto-restart while TTS is playing
