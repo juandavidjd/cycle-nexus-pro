@@ -325,10 +325,15 @@ export function AgentHabitat() {
 			}, 2500);
 		};
 		recognition.onend = () => {
-			// NEVER auto-restart while TTS is playing — this is the echo root cause
+			// NEVER auto-restart while TTS is playing
 			if (isPlayingRef.current) { setIsListening(false); return; }
 			if (inputModeRef.current === "voice") {
-				try { recognition.start(); } catch {}
+				// Delay restart to avoid rapid start/stop chime on mobile
+				setTimeout(() => {
+					if (inputModeRef.current === "voice" && !isPlayingRef.current) {
+						try { recognition.start(); } catch {}
+					}
+				}, 400);
 			} else { setIsListening(false); }
 		};
 		recognition.onerror = (e: any) => {
@@ -336,6 +341,7 @@ export function AgentHabitat() {
 				pushEvent({ event_id: `mic_${Date.now()}`, ts: new Date().toISOString(), source: "agent", type: "state_change", payload: { text: "Necesito permiso de micrófono para escucharte." }, system_action: { type: "mic_denied" } });
 				setInputMode("text");
 			}
+			// no-speech: silently handled by onend restart — no action needed
 		};
 		try { recognition.start(); recognitionRef.current = recognition; setIsListening(true); resetIdleTimer(); } catch {}
 	}, [handleSend, pushEvent, setInputMode, resetIdleTimer]);
