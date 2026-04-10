@@ -29,7 +29,8 @@ const AGENT_API = "https://ws.liveodi.com/agent";
 const CHAT_URL = "https://api.liveodi.com/odi/chat";
 const SPEAK_URL = "https://api.liveodi.com/odi/chat/speak";
 const HEARTBEAT_MS = 12_000;
-const RECONNECT_MS = 4_000;
+const RECONNECT_BASE_MS = 2_000;
+const RECONNECT_MAX_MS = 30_000;
 const MAX_EVENTS = 60;
 
 const SOURCE_COLORS: Record<string, string> = {
@@ -68,6 +69,41 @@ function timeAgo(iso: string): string {
 	if (s < 60) return `${s}s`;
 	if (s < 3600) return `${Math.floor(s / 60)}m`;
 	return `${Math.floor(s / 3600)}h`;
+}
+
+// ── Blindaje helpers ──
+const STATUS_COLORS: Record<string, string> = {
+	operativo: "#3af08f", active: "#3af08f", degraded: "#ffcc00",
+	timeout: "#ff9800", unavailable: "#ff4444", missing: "#4a5f7f",
+};
+
+function FreshnessTag({ data }: { data: any }) {
+	if (!data?._fetched_at) return null;
+	const status = data?.status || "missing";
+	const color = STATUS_COLORS[status] || "#4a5f7f";
+	const isOk = status === "operativo" || status === "active";
+	return (
+		<span className="text-[8px] ml-auto" style={{ color }}>
+			{isOk ? timeAgo(data._fetched_at) : status}
+		</span>
+	);
+}
+
+function DegradedCard({ name, data }: { name: string; data: any }) {
+	const status = data?.status || "unavailable";
+	const error = data?._error || "";
+	return (
+		<div className="rounded-lg p-2 border border-[#ff444422]" style={{ background: "#ff444408" }}>
+			<div className="flex items-center justify-between">
+				<div className="flex items-center gap-1.5">
+					<span className="text-xs font-semibold text-[#ff4444]">{name}</span>
+					<span className="text-[9px] px-1 rounded bg-[#ff444415] text-[#ff4444]">{status}</span>
+				</div>
+				{data?._fetched_at && <span className="text-[8px] text-[#4a5f7f]">{timeAgo(data._fetched_at)}</span>}
+			</div>
+			{error && <div className="text-[8px] text-[#ff4444] mt-0.5 opacity-60">{error}</div>}
+		</div>
+	);
 }
 
 // ── Component ──
@@ -122,6 +158,7 @@ export function AgentHabitat() {
 	const wsRef = useRef<WebSocket | null>(null);
 	const hbRef = useRef<ReturnType<typeof setInterval> | null>(null);
 	const reconRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const reconAttemptsRef = useRef(0);
 	const sessionRef = useRef(
 		typeof crypto !== "undefined" && crypto.randomUUID
 			? crypto.randomUUID()
@@ -518,6 +555,7 @@ export function AgentHabitat() {
 		wsRef.current = ws;
 		ws.onopen = () => {
 			if (!mountedRef.current) { ws.close(); return; }
+			reconAttemptsRef.current = 0;
 			setPhase("registering"); setWsUrlIdx(urlIdxRef.current);
 			ws.send(JSON.stringify({
 				type: "register", device_id: deviceRef.current, session_id: sessionRef.current,
@@ -567,7 +605,7 @@ export function AgentHabitat() {
 				pushEvent({ event_id: msg.event_id || `ev_${Date.now()}`, ts: msg.ts || new Date().toISOString(), source: msg.source || "unknown", type: msg.type || "event", level: msg.level, voice: msg.voice, mode: msg.mode, payload: msg.payload, system_action: msg.system_action });
 			} catch {}
 		};
-		ws.onclose = () => { if (!mountedRef.current) return; cleanup(); setPhase("offline"); urlIdxRef.current = (urlIdxRef.current + 1) % WS_URLS.length; reconRef.current = setTimeout(() => { if (mountedRef.current) connect(); }, RECONNECT_MS); };
+		ws.onclose = () => { if (!mountedRef.current) return; cleanup(); setPhase("offline"); urlIdxRef.current = (urlIdxRef.current + 1) % WS_URLS.length; const delay = Math.min(RECONNECT_BASE_MS * Math.pow(2, reconAttemptsRef.current), RECONNECT_MAX_MS); reconAttemptsRef.current++; reconRef.current = setTimeout(() => { if (mountedRef.current) connect(); }, delay); };
 		ws.onerror = () => { ws.close(); };
 	}, [cleanup, pushEvent]);
 
@@ -987,7 +1025,7 @@ export function AgentHabitat() {
 									)}
 
 									{/* === BILLING === */}
-									{liveManifest?.billing?.status === "operativo" && (
+									{liveManifest?.billing?.status === "operativo" ? (
 										<div className="rounded-lg p-2 border border-[#4caf5022]" style={{ background: "#4caf5008" }}>
 											<div className="flex items-center justify-between">
 												<div className="flex items-center gap-1.5">
@@ -996,7 +1034,7 @@ export function AgentHabitat() {
 														{liveManifest.billing.medicion_solo ? "medición" : "activo"}
 													</span>
 												</div>
-												<span className="text-[10px] text-[#4a5f7f]">score {(liveManifest.billing.score_promedio || 0).toFixed(2)}</span>
+												<FreshnessTag data={liveManifest.billing} />
 											</div>
 											<div className="grid grid-cols-3 gap-1 mt-1.5">
 												<div className="text-center">
@@ -1013,10 +1051,10 @@ export function AgentHabitat() {
 												</div>
 											</div>
 										</div>
-									)}
+									) : liveManifest?.billing?._fetched_at ? <DegradedCard name="BILLING" data={liveManifest.billing} /> : null}
 
 									{/* === GUARDIAN === */}
-									{liveManifest?.guardian?.status === "operativo" && (
+									{liveManifest?.guardian?.status === "operativo" ? (
 										<div className="rounded-lg p-2 border border-[#ff980022]" style={{ background: "#ff980008" }}>
 											<div className="flex items-center justify-between">
 												<div className="flex items-center gap-1.5">
@@ -1025,6 +1063,7 @@ export function AgentHabitat() {
 														{liveManifest.guardian.services_summary?.alive || 0}/{liveManifest.guardian.services_summary?.total || 0} servicios
 													</span>
 												</div>
+												<FreshnessTag data={liveManifest.guardian} />
 											</div>
 											<div className="grid grid-cols-3 gap-1 mt-1.5">
 												<div className="text-center">
@@ -1041,7 +1080,7 @@ export function AgentHabitat() {
 												</div>
 											</div>
 										</div>
-									)}
+									) : liveManifest?.guardian?._fetched_at ? <DegradedCard name="GUARDIAN" data={liveManifest.guardian} /> : null}
 
 									{/* === PIPELINE === */}
 									{liveManifest?.pipeline?.status === "operativo" && (
@@ -1225,10 +1264,41 @@ export function AgentHabitat() {
 										</div>
 									)}
 
-									<div className="text-[10px] text-[#4a5f7f] pt-2 border-t border-[#1a2a42]">
-										<p>v{liveManifest.version} · {liveManifest.flows_available} flows</p>
-										<p>device: {deviceRef.current.slice(0, 16)}</p>
-										<p>session: {sessionRef.current.slice(0, 12)}...</p>
+									{/* === FRESHNESS GLOBAL === */}
+									<div className="text-[10px] pt-2 border-t border-[#1a2a42]">
+										<div className="flex items-center justify-between mb-1">
+											<span className="text-[#4a5f7f]">v{liveManifest.version} · {liveManifest.flows_available} flows</span>
+											{liveManifest.generated_at && (
+												<span className="text-[8px] text-[#3af08f]">{timeAgo(liveManifest.generated_at)}</span>
+											)}
+										</div>
+										<div className="flex flex-wrap gap-1">
+											{[
+												["billing", liveManifest.billing],
+												["guardian", liveManifest.guardian],
+												["pipeline", liveManifest.pipeline],
+												["CES", liveManifest.ces],
+												["leads", liveManifest.leads],
+												["turismo", liveManifest.tourism],
+												["tiendas", liveManifest.stores_depth],
+												["healing", liveManifest.self_healing],
+												["logs", liveManifest.log_stats],
+											].map(([name, data]: [string, any]) => {
+												const st = data?.status || data?._fetched_at ? "ok" : "missing";
+												const isOk = st === "operativo" || st === "active" || st === "ok";
+												return (
+													<span key={name as string} className="text-[7px] px-1 py-0.5 rounded" style={{
+														background: isOk ? "#3af08f12" : "#ff444412",
+														color: isOk ? "#3af08f" : "#ff4444",
+													}}>
+														{name as string}
+													</span>
+												);
+											})}
+										</div>
+										<p className="text-[8px] text-[#3a4f6f] mt-1">
+											{deviceRef.current.slice(0, 12)} · {sessionRef.current.slice(0, 8)}
+										</p>
 									</div>
 								</div>
 							)}
@@ -1447,9 +1517,14 @@ export function AgentHabitat() {
 										</div>
 									)}
 
-									{/* Version footer */}
-									<div className="text-[10px] text-[#4a5f7f] pt-2 border-t border-[#1a2a42]">
-										v{liveManifest.version} · {liveManifest.flows_available} flows
+									{/* Version + freshness footer */}
+									<div className="text-[10px] pt-2 border-t border-[#1a2a42]">
+										<div className="flex items-center justify-between">
+											<span className="text-[#4a5f7f]">v{liveManifest.version} · {liveManifest.flows_available} flows</span>
+											{liveManifest.generated_at && (
+												<span className="text-[8px] text-[#3af08f]">{timeAgo(liveManifest.generated_at)}</span>
+											)}
+										</div>
 									</div>
 								</div>
 							)}
