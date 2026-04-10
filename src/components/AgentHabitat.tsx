@@ -333,7 +333,7 @@ export function AgentHabitat() {
 					if (inputModeRef.current === "voice" && !isPlayingRef.current) {
 						try { recognition.start(); } catch {}
 					}
-				}, 400);
+				}, 1000);
 			} else { setIsListening(false); }
 		};
 		recognition.onerror = (e: any) => {
