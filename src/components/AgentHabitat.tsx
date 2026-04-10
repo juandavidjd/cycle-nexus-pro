@@ -1455,11 +1455,68 @@ export function AgentHabitat() {
 							)}
 
 							{sideTab === "flows" && (
-								<p className="text-[10px] text-[#4a5f7f]">{flows.length} flujos disponibles</p>
+								<div className="grid gap-3">
+									{categories.map((cat: any) => {
+										const catFlows = (flows || []).filter((f: any) => f.category === cat.id);
+										if (catFlows.length === 0) return null;
+										return (
+											<div key={cat.id}>
+												<h4 className="text-[10px] font-semibold mb-1.5" style={{ color: cat.color || "#7f95bb" }}>
+													{cat.icon} {cat.label} ({catFlows.length})
+												</h4>
+												<div className="grid gap-1">
+													{catFlows.map((f: any) => (
+														<button key={f.id} onClick={() => { startFlow(f.id); setShowSidebar(false); }}
+															className="text-left rounded px-2 py-1.5 border border-[#1a2a42] bg-[#03070d] cursor-pointer w-full">
+															<div className="flex items-center gap-1.5">
+																<span className="text-xs">{f.icon}</span>
+																<span className="text-[11px] text-[#dbe7ff]">{f.label}</span>
+																<span className={`text-[9px] ml-auto px-1 rounded ${f.readiness === "live" ? "text-[#3af08f] bg-[#3af08f11]" : f.readiness === "partial" ? "text-[#ffcc00] bg-[#ffcc0011]" : "text-[#4a5f7f] bg-[#4a5f7f11]"}`}>
+																	{f.readiness}
+																</span>
+															</div>
+															<p className="text-[9px] text-[#4a5f7f] mt-0.5">{f.desc}</p>
+														</button>
+													))}
+												</div>
+											</div>
+										);
+									})}
+									{flows.length === 0 && <p className="text-[10px] text-[#4a5f7f]">Cargando flujos...</p>}
+								</div>
 							)}
 
 							{sideTab === "stats" && stats && (
-								<p className="text-[10px] text-[#4a5f7f]">{stats.events_total} events · {stats.sessions_total} sesiones</p>
+								<div className="grid gap-3">
+									<div className="grid grid-cols-2 gap-2">
+										{[
+											["Devices", stats.devices_total],
+											["Sessions", stats.sessions_total],
+											["Events", stats.events_total],
+											["Flows done", stats.flows_completed],
+										].map(([label, val]) => (
+											<div key={label as string} className="rounded border border-[#1a2a42] bg-[#03070d] p-2 text-center">
+												<p className="text-lg font-bold text-[#dbe7ff]">{(val as number)?.toLocaleString()}</p>
+												<p className="text-[9px] text-[#4a5f7f]">{label as string}</p>
+											</div>
+										))}
+									</div>
+									<div>
+										<h4 className="text-[10px] text-[#49c2ff] font-semibold mb-1.5">Events by source</h4>
+										<div className="grid gap-1">
+											{Object.entries(stats.events_by_source || {}).map(([src, count]: [string, any]) => (
+												<div key={src} className="flex items-center justify-between text-xs">
+													<span style={{ color: SOURCE_COLORS[src] || "#7f95bb" }}>{src}</span>
+													<span className="text-[#8ca0c6]">{count}</span>
+												</div>
+											))}
+										</div>
+									</div>
+									<p className="text-[9px] text-[#4a5f7f]">{stats.sessions_active} sesiones activas</p>
+								</div>
+							)}
+							{sideTab === "stats" && !stats && (
+								<p className="text-[10px] text-[#4a5f7f]">Cargando stats...</p>
 							)}
 						</div>
 					</div>
