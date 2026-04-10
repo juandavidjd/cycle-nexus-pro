@@ -808,7 +808,7 @@ export function AgentHabitat() {
 
 					{/* ── Sidebar: Flows / Manifest / Stats ── */}
 					{showSidebar && !isMobile && (
-						<aside className="overflow-y-auto max-h-[80vh] rounded-lg border border-[#1a2a42] bg-[#0a1628] p-3">
+						<aside className="rounded-lg border border-[#1a2a42] bg-[#0a1628] p-3 overflow-y-auto sticky top-4" style={{ maxHeight: "calc(100vh - 120px)", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}>
 							{/* Tabs */}
 							<div className="flex gap-1 mb-3">
 								{(["flows", "manifest", "stats"] as SideTab[]).map((t) => (
