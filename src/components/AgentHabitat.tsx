@@ -90,7 +90,7 @@ export function AgentHabitat() {
 	}, []);
 	const [chatInput, setChatInput] = useState("");
 	const [isSending, setIsSending] = useState(false);
-	const [showSidebar, setShowSidebar] = useState(false);
+	const [showSidebar, setShowSidebar] = useState(true);
 	const [isMobile, setIsMobile] = useState(false);
 	useEffect(() => {
 		const check = () => setIsMobile(window.innerWidth < 768);
@@ -98,7 +98,7 @@ export function AgentHabitat() {
 		window.addEventListener("resize", check);
 		return () => window.removeEventListener("resize", check);
 	}, []);
-	const [sideTab, setSideTab] = useState<SideTab>("flows");
+	const [sideTab, setSideTab] = useState<SideTab>("manifest");
 
 	// ── Live data from backend ──
 	const [liveManifest, setLiveManifest] = useState<any>(null);
