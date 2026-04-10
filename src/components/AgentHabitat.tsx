@@ -235,6 +235,7 @@ export function AgentHabitat() {
 	const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const inputModeRef = useRef<InputMode>("text");
+	const latestTextRef = useRef("");
 
 	const handleSend = useCallback(async (text?: string) => {
 		const msg = (text || chatInput).trim();
@@ -277,51 +278,38 @@ export function AgentHabitat() {
 		recognition.continuous = true;
 		recognition.interimResults = true;
 		recognition.onresult = (event: any) => {
-			// Hard mute: ignore ALL STT input while TTS is playing
 			if (isPlayingRef.current) return;
-
-			// Snapshot: read ALL results, separate final from interim
-			// On mobile Chrome, each isFinal contains full accumulated text
-			// so we DON'T accumulate — we rebuild from the full results array
-			let allFinal = "";
-			let currentInterim = "";
-			for (let i = 0; i < event.results.length; i++) {
-				if (event.results[i].isFinal) {
-					allFinal += event.results[i][0].transcript + " ";
-				} else {
-					currentInterim += event.results[i][0].transcript;
-				}
+			// Get the latest result only (last in array)
+			const last = event.results[event.results.length - 1];
+			if (!last) return;
+			const text = last[0].transcript.trim();
+			if (last.isFinal) {
+				latestTextRef.current = text;
+				setInterimText(text);
+			} else {
+				// Interim: show as preview but use latest final if exists
+				setInterimText(latestTextRef.current ? latestTextRef.current + " " + text : text);
 			}
-			const pendingFinal = allFinal.trim();
-
-			// Show: final text + interim preview
-			setInterimText(pendingFinal + (currentInterim ? " " + currentInterim : ""));
-
-			// Reset silence timer — sends pendingFinal (snapshot of all isFinal text)
+			// Silence timer: 2.5s after last activity, send and restart recognition
 			if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-			if (pendingFinal || currentInterim) {
-				silenceTimerRef.current = setTimeout(() => {
-					if (isPlayingRef.current) return;
-					// Re-read all final results at send time for freshest state
-					let sendText = "";
-					for (let i = 0; i < event.results.length; i++) {
-						if (event.results[i].isFinal) sendText += event.results[i][0].transcript + " ";
-					}
-					const t = sendText.trim();
-					if (!t || t.length < 3) { setInterimText(""); return; }
-					// Anti-echo
-					const lower = t.toLowerCase();
-					const isEcho = recentOdiPhrasesRef.current.some(p => {
-						const a = p.replace(/[^a-záéíóúñü\s]/gi, "").trim();
-						const b = lower.replace(/[^a-záéíóúñü\s]/gi, "").trim();
-						if (!a || !b) return false;
-						return a.includes(b) || b.includes(a);
-					});
-					if (isEcho) { setInterimText(""); return; }
-					handleSend(t);
-					setInterimText("");
-				}, 2500);
-			}
+			silenceTimerRef.current = setTimeout(() => {
+				if (isPlayingRef.current) return;
+				const t = latestTextRef.current || text;
+				latestTextRef.current = "";
+				if (!t || t.length < 3) { setInterimText(""); return; }
+				// Anti-echo
+				const lower = t.toLowerCase();
+				const isEcho = recentOdiPhrasesRef.current.some(p => {
+					const a = p.replace(/[^a-záéíóúñü\s]/gi, "").trim();
+					const b = lower.replace(/[^a-záéíóúñü\s]/gi, "").trim();
+					return a && b && (a.includes(b) || b.includes(a));
+				});
+				if (isEcho) { setInterimText(""); return; }
+				handleSend(t);
+				setInterimText("");
+				// Stop recognition to clear results array, onend will restart
+				try { recognition.stop(); } catch {}
+			}, 2500);
 		};
 		recognition.onend = () => {
 			// NEVER auto-restart while TTS is playing
