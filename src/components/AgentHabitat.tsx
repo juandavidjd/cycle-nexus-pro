@@ -38,7 +38,8 @@ const SOURCE_COLORS: Record<string, string> = {
 	voice: "#ec4899", flow: "#a78bfa",
 	whatsapp: "#25D366", manager: "#ff9800",
 	turismo: "#ff7043", lead: "#26a69a",
-	ces: "#ef5350",
+	ces: "#ef5350", billing: "#4caf50",
+	guardian: "#ff9800",
 };
 
 const SVC_COLOR: Record<string, string> = {
@@ -360,7 +361,49 @@ export function AgentHabitat() {
 		return () => window.removeEventListener("keydown", handler);
 	}, [startContinuousListening, stopContinuousListening, setInputMode]);
 
-	// Wake word disabled until echo prevention is stable
+	// === OC-05: Wake word "ODI" — passive listener in text mode ===
+	const wakeRecRef = useRef<any>(null);
+	useEffect(() => {
+		if (!userHasInteracted) return;
+		const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+		if (!SR) return;
+		if (inputMode === "voice") {
+			if (wakeRecRef.current) { try { wakeRecRef.current.stop(); } catch {} wakeRecRef.current = null; }
+			return;
+		}
+		const wake = new SR();
+		wake.lang = "es-CO";
+		wake.continuous = true;
+		wake.interimResults = false;
+		wake.onresult = (event: any) => {
+			const last = event.results[event.results.length - 1];
+			if (!last.isFinal) return;
+			const transcript = last[0].transcript.trim().toLowerCase()
+				.replace(/\bo\s*d\s*i\b/gi, "odi")
+				.replace(/\b(oye|hoy|ody|oh di|od i|odie|o de i)\b/gi, "odi");
+			if (transcript.startsWith("odi")) {
+				const command = transcript.replace(/^odi\s*/, "").trim();
+				try { wake.stop(); } catch {}
+				wakeRecRef.current = null;
+				setInputMode("voice");
+				startContinuousListening();
+				if (command) handleSend(command);
+			}
+		};
+		wake.onend = () => {
+			if (inputModeRef.current !== "voice" && wakeRecRef.current) {
+				setTimeout(() => { try { wake.start(); } catch {} }, 500);
+			}
+		};
+		wake.onerror = (e: any) => {
+			if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+				wakeRecRef.current = null;
+				return;
+			}
+		};
+		try { wake.start(); wakeRecRef.current = wake; } catch {}
+		return () => { try { wake.stop(); } catch {} wakeRecRef.current = null; };
+	}, [userHasInteracted, inputMode, startContinuousListening, setInputMode, handleSend]);
 
 	// === Load live manifest ===
 	useEffect(() => {
@@ -940,6 +983,147 @@ export function AgentHabitat() {
 												</div>
 											</div>
 											<div className="text-[9px] text-[#4a5f7f] mt-1">{liveManifest.ces.decisions_total} decisiones totales</div>
+										</div>
+									)}
+
+									{/* === BILLING === */}
+									{liveManifest?.billing?.status === "operativo" && (
+										<div className="rounded-lg p-2 border border-[#4caf5022]" style={{ background: "#4caf5008" }}>
+											<div className="flex items-center justify-between">
+												<div className="flex items-center gap-1.5">
+													<span className="text-xs font-semibold text-[#4caf50]">BILLING</span>
+													<span className="text-[9px] px-1 rounded bg-[#4caf5015] text-[#4caf50]">
+														{liveManifest.billing.medicion_solo ? "medición" : "activo"}
+													</span>
+												</div>
+												<span className="text-[10px] text-[#4a5f7f]">score {(liveManifest.billing.score_promedio || 0).toFixed(2)}</span>
+											</div>
+											<div className="grid grid-cols-3 gap-1 mt-1.5">
+												<div className="text-center">
+													<div className="text-[11px] font-semibold text-[#4caf50]">{liveManifest.billing.total_ventas}</div>
+													<div className="text-[8px] text-[#4a5f7f]">ventas</div>
+												</div>
+												<div className="text-center">
+													<div className="text-[11px] font-semibold text-[#4caf50]">${((liveManifest.billing.total_monto || 0) / 1000).toFixed(0)}K</div>
+													<div className="text-[8px] text-[#4a5f7f]">revenue</div>
+												</div>
+												<div className="text-center">
+													<div className="text-[11px] font-semibold text-[#ff9800]">${((liveManifest.billing.total_comision || 0) / 1000).toFixed(1)}K</div>
+													<div className="text-[8px] text-[#4a5f7f]">comisión</div>
+												</div>
+											</div>
+										</div>
+									)}
+
+									{/* === GUARDIAN === */}
+									{liveManifest?.guardian?.status === "operativo" && (
+										<div className="rounded-lg p-2 border border-[#ff980022]" style={{ background: "#ff980008" }}>
+											<div className="flex items-center justify-between">
+												<div className="flex items-center gap-1.5">
+													<span className="text-xs font-semibold text-[#ff9800]">GUARDIAN</span>
+													<span className="text-[9px] px-1 rounded bg-[#ff980015] text-[#ff9800]">
+														{liveManifest.guardian.services_summary?.alive || 0}/{liveManifest.guardian.services_summary?.total || 0} servicios
+													</span>
+												</div>
+											</div>
+											<div className="grid grid-cols-3 gap-1 mt-1.5">
+												<div className="text-center">
+													<div className="text-[11px] font-semibold text-[#ff9800]">{liveManifest.guardian.stores_total}</div>
+													<div className="text-[8px] text-[#4a5f7f]">tiendas</div>
+												</div>
+												<div className="text-center">
+													<div className="text-[11px] font-semibold text-[#3af08f]">{(liveManifest.guardian.products_active || 0).toLocaleString()}</div>
+													<div className="text-[8px] text-[#4a5f7f]">activos</div>
+												</div>
+												<div className="text-center">
+													<div className="text-[11px] font-semibold text-[#49c2ff]">{(liveManifest.guardian.products_total || 0).toLocaleString()}</div>
+													<div className="text-[8px] text-[#4a5f7f]">total</div>
+												</div>
+											</div>
+										</div>
+									)}
+
+									{/* === PIPELINE === */}
+									{liveManifest?.pipeline?.status === "operativo" && (
+										<div className="rounded-lg p-2 border border-[#ffcc0022]" style={{ background: "#ffcc0008" }}>
+											<div className="flex items-center justify-between">
+												<div className="flex items-center gap-1.5">
+													<span className="text-xs font-semibold text-[#ffcc00]">PIPELINE</span>
+													<span className="text-[9px] px-1 rounded bg-[#ffcc0015] text-[#ffcc00]">{liveManifest.pipeline.version}</span>
+												</div>
+												<span className="text-[10px] text-[#4a5f7f]">{liveManifest.pipeline.steps} steps</span>
+											</div>
+											<div className="text-[10px] text-[#8ca0c6] mt-1">
+												{liveManifest.pipeline.total_ejecuciones} ejecuciones
+											</div>
+											{liveManifest.pipeline.last_execution && (
+												<div className="text-[9px] text-[#4a5f7f] mt-0.5">
+													Última: {liveManifest.pipeline.last_execution.store} → {liveManifest.pipeline.last_execution.status}
+													{" "}({liveManifest.pipeline.last_execution.products_out} productos)
+												</div>
+											)}
+											{liveManifest.pipeline.by_store && (
+												<div className="flex flex-wrap gap-1 mt-1">
+													{liveManifest.pipeline.by_store.map((s: any) => (
+														<span key={s.store} className="text-[8px] px-1 py-0.5 rounded bg-[#1a2a42] text-[#8ca0c6]">
+															{s.store}: {s.runs}
+														</span>
+													))}
+												</div>
+											)}
+										</div>
+									)}
+
+									{/* === LEADS === */}
+									{liveManifest?.leads?.status === "operativo" && (
+										<div className="rounded-lg p-2 border border-[#26a69a22]" style={{ background: "#26a69a08" }}>
+											<div className="flex items-center justify-between">
+												<div className="flex items-center gap-1.5">
+													<span className="text-xs font-semibold text-[#26a69a]">LEADS</span>
+													<span className="text-[9px] px-1 rounded bg-[#26a69a15] text-[#26a69a]">{liveManifest.leads.total} capturados</span>
+												</div>
+											</div>
+											{liveManifest.leads.by_industry && (
+												<div className="flex gap-2 mt-1">
+													{liveManifest.leads.by_industry.map((ind: any) => (
+														<div key={ind.industry_id} className="text-center">
+															<div className="text-[11px] font-semibold text-[#26a69a]">{ind.total}</div>
+															<div className="text-[8px] text-[#4a5f7f]">{ind.industry_id}</div>
+														</div>
+													))}
+												</div>
+											)}
+										</div>
+									)}
+
+									{/* === TURISMO === */}
+									{liveManifest?.tourism?.status === "operativo" && (
+										<div className="rounded-lg p-2 border border-[#ff704322]" style={{ background: "#ff704308" }}>
+											<div className="flex items-center justify-between">
+												<div className="flex items-center gap-1.5">
+													<span className="text-xs font-semibold text-[#ff7043]">TURISMO</span>
+													<span className="text-[9px] px-1 rounded bg-[#ff704315] text-[#ff7043]">{liveManifest.tourism.pisos_construidos} pisos</span>
+												</div>
+												<span className="text-[10px] text-[#4a5f7f]">{liveManifest.tourism.crons_activos} crons</span>
+											</div>
+											<div className="grid grid-cols-4 gap-1 mt-1.5">
+												<div className="text-center">
+													<div className="text-[11px] font-semibold text-[#ff7043]">{liveManifest.tourism.bookings}</div>
+													<div className="text-[8px] text-[#4a5f7f]">bookings</div>
+												</div>
+												<div className="text-center">
+													<div className="text-[11px] font-semibold text-[#26a69a]">{liveManifest.tourism.leads}</div>
+													<div className="text-[8px] text-[#4a5f7f]">leads</div>
+												</div>
+												<div className="text-center">
+													<div className="text-[11px] font-semibold text-[#49c2ff]">{liveManifest.tourism.quotes}</div>
+													<div className="text-[8px] text-[#4a5f7f]">quotes</div>
+												</div>
+												<div className="text-center">
+													<div className="text-[11px] font-semibold text-[#8ca0c6]">{liveManifest.tourism.events}</div>
+													<div className="text-[8px] text-[#4a5f7f]">events</div>
+												</div>
+											</div>
 										</div>
 									)}
 
