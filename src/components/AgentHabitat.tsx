@@ -29,8 +29,7 @@ const AGENT_API = "https://ws.liveodi.com/agent";
 const CHAT_URL = "https://api.liveodi.com/odi/chat";
 const SPEAK_URL = "https://api.liveodi.com/odi/chat/speak";
 const HEARTBEAT_MS = 12_000;
-const RECONNECT_BASE_MS = 2_000;
-const RECONNECT_MAX_MS = 30_000;
+const RECONNECT_MS = 4_000;
 const MAX_EVENTS = 60;
 
 const SOURCE_COLORS: Record<string, string> = {
@@ -39,8 +38,7 @@ const SOURCE_COLORS: Record<string, string> = {
 	voice: "#ec4899", flow: "#a78bfa",
 	whatsapp: "#25D366", manager: "#ff9800",
 	turismo: "#ff7043", lead: "#26a69a",
-	ces: "#ef5350", billing: "#4caf50",
-	guardian: "#ff9800",
+	ces: "#ef5350",
 };
 
 const SVC_COLOR: Record<string, string> = {
@@ -71,42 +69,6 @@ function timeAgo(iso: string): string {
 	return `${Math.floor(s / 3600)}h`;
 }
 
-// ── Blindaje helpers ──
-const STATUS_COLORS: Record<string, string> = {
-	operativo: "#3af08f", active: "#3af08f", degraded: "#ffcc00",
-	timeout: "#ff9800", unavailable: "#ff4444", missing: "#4a5f7f",
-};
-
-function FreshnessTag({ data }: { data: any }) {
-	if (!data?._fetched_at) return null;
-	const status = data?.status || "missing";
-	const color = STATUS_COLORS[status] || "#4a5f7f";
-	const isOk = status === "operativo" || status === "active";
-	return (
-		<span className="text-[8px] ml-auto" style={{ color }}>
-			{isOk ? timeAgo(data._fetched_at) : status}
-		</span>
-	);
-}
-
-function DegradedCard({ name, data }: { name: string; data: any }) {
-	const status = data?.status || "unavailable";
-	const error = data?._error || "";
-	return (
-		<div className="rounded-lg p-3 border-2 border-[#ff444466] animate-pulse" style={{ background: "#ff444418" }}>
-			<div className="flex items-center justify-between">
-				<div className="flex items-center gap-1.5">
-					<span className="text-sm">&#x26A0;</span>
-					<span className="text-xs font-bold text-[#ff4444]">{name}</span>
-					<span className="text-[9px] px-1.5 py-0.5 rounded bg-[#ff444430] text-[#ff4444] font-semibold">{status}</span>
-				</div>
-				{data?._fetched_at && <span className="text-[8px] text-[#ff8888]">{timeAgo(data._fetched_at)}</span>}
-			</div>
-			{error && <div className="text-[9px] text-[#ff6666] mt-1">{error.slice(0, 80)}</div>}
-		</div>
-	);
-}
-
 // ── Component ──
 export function AgentHabitat() {
 	const [phase, setPhase] = useState<Phase>("idle");
@@ -127,7 +89,7 @@ export function AgentHabitat() {
 	}, []);
 	const [chatInput, setChatInput] = useState("");
 	const [isSending, setIsSending] = useState(false);
-	const [showSidebar, setShowSidebar] = useState(true);
+	const [showSidebar, setShowSidebar] = useState(false);
 	const [isMobile, setIsMobile] = useState(false);
 	useEffect(() => {
 		const check = () => setIsMobile(window.innerWidth < 768);
@@ -135,7 +97,7 @@ export function AgentHabitat() {
 		window.addEventListener("resize", check);
 		return () => window.removeEventListener("resize", check);
 	}, []);
-	const [sideTab, setSideTab] = useState<SideTab>("manifest");
+	const [sideTab, setSideTab] = useState<SideTab>("flows");
 
 	// ── Live data from backend ──
 	const [liveManifest, setLiveManifest] = useState<any>(null);
@@ -159,7 +121,6 @@ export function AgentHabitat() {
 	const wsRef = useRef<WebSocket | null>(null);
 	const hbRef = useRef<ReturnType<typeof setInterval> | null>(null);
 	const reconRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-	const reconAttemptsRef = useRef(0);
 	const sessionRef = useRef(
 		typeof crypto !== "undefined" && crypto.randomUUID
 			? crypto.randomUUID()
@@ -219,15 +180,11 @@ export function AgentHabitat() {
 	const speakText = useCallback(async (text: string, voice: string = "ramona") => {
 		if (!userHasInteracted || isPlayingRef.current || !text) return;
 		const truncated = text.length > 500 ? text.slice(0, 497) + "..." : text;
-		// OC-07 R3: Transition to ASSISTANT_SPEAKING
-		turnStateRef.current = "ASSISTANT_SPEAKING";
 		// Track what ODI says for anti-echo filter
 		recentOdiPhrasesRef.current = [...recentOdiPhrasesRef.current.slice(-5), truncated.toLowerCase()];
-		lastAssistantTextRef.current = truncated.toLowerCase();
-		lastAssistantTsRef.current = Date.now();
 		// Echo prevention: pause STT while speaking
 		const wasListening = !!recognitionRef.current;
-		if (wasListening) { try { recognitionRef.current?.stop(); setIsListening(false); } catch {} }
+		if (wasListening) { try { recognitionRef.current?.stop(); } catch {} }
 		// Cleanup previous audio
 		if (audioRef.current) {
 			audioRef.current.pause();
@@ -252,31 +209,14 @@ export function AgentHabitat() {
 				audioRef.current = audio;
 				audio.onended = () => {
 					isPlayingRef.current = false; setIsSpeaking(false); URL.revokeObjectURL(url);
-					// OC-07 R1+R3: COOLDOWN before reopening mic
-					turnStateRef.current = "COOLDOWN";
 					if (inputModeRef.current === "voice" && wasListening) {
-						setTimeout(() => {
-							if (!isPlayingRef.current && turnStateRef.current === "COOLDOWN") {
-								turnStateRef.current = "USER_IDLE";
-								try { recognitionRef.current?.start(); setIsListening(true); } catch {}
-							}
-						}, COOLDOWN_MS);
-					} else {
-						setTimeout(() => { turnStateRef.current = "USER_IDLE"; }, COOLDOWN_MS);
+						setTimeout(() => { if (!isPlayingRef.current) { try { recognitionRef.current?.start(); setIsListening(true); } catch {} } }, 800);
 					}
 				};
 				audio.onerror = () => {
 					isPlayingRef.current = false; setIsSpeaking(false);
-					turnStateRef.current = "COOLDOWN";
 					if (inputModeRef.current === "voice" && wasListening) {
-						setTimeout(() => {
-							if (!isPlayingRef.current && turnStateRef.current === "COOLDOWN") {
-								turnStateRef.current = "USER_IDLE";
-								try { recognitionRef.current?.start(); setIsListening(true); } catch {}
-							}
-						}, COOLDOWN_MS);
-					} else {
-						setTimeout(() => { turnStateRef.current = "USER_IDLE"; }, COOLDOWN_MS);
+						setTimeout(() => { if (!isPlayingRef.current) { try { recognitionRef.current?.start(); setIsListening(true); } catch {} } }, 800);
 					}
 				};
 				audio.src = url;
@@ -295,38 +235,11 @@ export function AgentHabitat() {
 	const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const inputModeRef = useRef<InputMode>("text");
-
-	// === OC-07 R3: Turn state machine ===
-	type TurnState = "USER_IDLE" | "USER_SPEAKING" | "ASSISTANT_THINKING" | "ASSISTANT_SPEAKING" | "COOLDOWN";
-	const turnStateRef = useRef<TurnState>("USER_IDLE");
-	const lastAssistantTextRef = useRef("");
-	const lastAssistantTsRef = useRef(0);
-	const COOLDOWN_MS = 1200;
 	const latestTextRef = useRef("");
 
 	const handleSend = useCallback(async (text?: string) => {
 		const msg = (text || chatInput).trim();
 		if (!msg || isSending) return;
-		// OC-07 R3: Block input during ASSISTANT_SPEAKING and COOLDOWN
-		if (turnStateRef.current === "ASSISTANT_SPEAKING" || turnStateRef.current === "COOLDOWN") return;
-		// OC-07 R2: N-gram echo guard (frontend layer)
-		const elapsed = Date.now() - lastAssistantTsRef.current;
-		if (elapsed < 3000 && lastAssistantTextRef.current) {
-			const ngram = (s: string, n: number = 3) => {
-				const w = s.toLowerCase().replace(/[^a-záéíóúñü\s]/gi, "").split(/\s+/).filter(Boolean);
-				const grams = new Set<string>();
-				for (let i = 0; i <= w.length - n; i++) grams.add(w.slice(i, i + n).join(" "));
-				return grams;
-			};
-			const userNg = ngram(msg);
-			const odiNg = ngram(lastAssistantTextRef.current);
-			if (odiNg.size > 0 && userNg.size > 0) {
-				let overlap = 0;
-				userNg.forEach(g => { if (odiNg.has(g)) overlap++; });
-				if (overlap / odiNg.size > 0.5) return; // echo detected, discard silently
-			}
-		}
-		turnStateRef.current = "ASSISTANT_THINKING";
 		setChatInput("");
 		setIsSending(true);
 		pushEvent({ event_id: `user_${Date.now()}`, ts: new Date().toISOString(), source: "agent", type: "user_message", payload: { text: msg } });
@@ -340,17 +253,10 @@ export function AgentHabitat() {
 				const responseText = data.response || "";
 				const voice = data.voice || "ramona";
 				pushEvent({ event_id: `chat_${Date.now()}`, ts: new Date().toISOString(), source: "chat", type: "message", voice, mode: data.mode || "commerce", payload: { text: responseText } });
-				if (inputModeRef.current === "voice" && responseText) {
-					speakText(responseText, voice); // speakText sets ASSISTANT_SPEAKING
-				} else {
-					turnStateRef.current = "USER_IDLE"; // text mode: ready for next input
-				}
-			} else {
-				turnStateRef.current = "USER_IDLE";
+				if (inputModeRef.current === "voice" && responseText) speakText(responseText, voice);
 			}
 		} catch {
 			pushEvent({ event_id: `err_${Date.now()}`, ts: new Date().toISOString(), source: "agent", type: "error", payload: { text: "No pude conectar con el chat" } });
-			turnStateRef.current = "USER_IDLE";
 		}
 		setIsSending(false);
 	}, [chatInput, isSending, inputMode, pushEvent, speakText]);
@@ -372,8 +278,7 @@ export function AgentHabitat() {
 		recognition.continuous = true;
 		recognition.interimResults = true;
 		recognition.onresult = (event: any) => {
-			// OC-07 R1+R3: Block STT results during TTS or cooldown
-			if (isPlayingRef.current || turnStateRef.current === "ASSISTANT_SPEAKING" || turnStateRef.current === "COOLDOWN") return;
+			if (isPlayingRef.current) return;
 			// Get the latest result only (last in array)
 			const last = event.results[event.results.length - 1];
 			if (!last) return;
@@ -388,7 +293,7 @@ export function AgentHabitat() {
 			// Silence timer: 2.5s after last activity, send and restart recognition
 			if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
 			silenceTimerRef.current = setTimeout(() => {
-				if (isPlayingRef.current || turnStateRef.current === "ASSISTANT_SPEAKING" || turnStateRef.current === "COOLDOWN") return;
+				if (isPlayingRef.current) return;
 				const t = latestTextRef.current || text;
 				latestTextRef.current = "";
 				if (!t || t.length < 3) { setInterimText(""); return; }
@@ -455,49 +360,7 @@ export function AgentHabitat() {
 		return () => window.removeEventListener("keydown", handler);
 	}, [startContinuousListening, stopContinuousListening, setInputMode]);
 
-	// === OC-05: Wake word "ODI" — passive listener in text mode ===
-	const wakeRecRef = useRef<any>(null);
-	useEffect(() => {
-		if (!userHasInteracted) return;
-		const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-		if (!SR) return;
-		if (inputMode === "voice") {
-			if (wakeRecRef.current) { try { wakeRecRef.current.stop(); } catch {} wakeRecRef.current = null; }
-			return;
-		}
-		const wake = new SR();
-		wake.lang = "es-CO";
-		wake.continuous = true;
-		wake.interimResults = false;
-		wake.onresult = (event: any) => {
-			const last = event.results[event.results.length - 1];
-			if (!last.isFinal) return;
-			const transcript = last[0].transcript.trim().toLowerCase()
-				.replace(/\bo\s*d\s*i\b/gi, "odi")
-				.replace(/\b(oye|hoy|ody|oh di|od i|odie|o de i)\b/gi, "odi");
-			if (transcript.startsWith("odi")) {
-				const command = transcript.replace(/^odi\s*/, "").trim();
-				try { wake.stop(); } catch {}
-				wakeRecRef.current = null;
-				setInputMode("voice");
-				startContinuousListening();
-				if (command) handleSend(command);
-			}
-		};
-		wake.onend = () => {
-			if (inputModeRef.current !== "voice" && wakeRecRef.current) {
-				setTimeout(() => { try { wake.start(); } catch {} }, 500);
-			}
-		};
-		wake.onerror = (e: any) => {
-			if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-				wakeRecRef.current = null;
-				return;
-			}
-		};
-		try { wake.start(); wakeRecRef.current = wake; } catch {}
-		return () => { try { wake.stop(); } catch {} wakeRecRef.current = null; };
-	}, [userHasInteracted, inputMode, startContinuousListening, setInputMode, handleSend]);
+	// Wake word disabled until echo prevention is stable
 
 	// === Load live manifest ===
 	useEffect(() => {
@@ -612,7 +475,6 @@ export function AgentHabitat() {
 		wsRef.current = ws;
 		ws.onopen = () => {
 			if (!mountedRef.current) { ws.close(); return; }
-			reconAttemptsRef.current = 0;
 			setPhase("registering"); setWsUrlIdx(urlIdxRef.current);
 			ws.send(JSON.stringify({
 				type: "register", device_id: deviceRef.current, session_id: sessionRef.current,
@@ -662,7 +524,7 @@ export function AgentHabitat() {
 				pushEvent({ event_id: msg.event_id || `ev_${Date.now()}`, ts: msg.ts || new Date().toISOString(), source: msg.source || "unknown", type: msg.type || "event", level: msg.level, voice: msg.voice, mode: msg.mode, payload: msg.payload, system_action: msg.system_action });
 			} catch {}
 		};
-		ws.onclose = () => { if (!mountedRef.current) return; cleanup(); setPhase("offline"); urlIdxRef.current = (urlIdxRef.current + 1) % WS_URLS.length; const delay = Math.min(RECONNECT_BASE_MS * Math.pow(2, reconAttemptsRef.current), RECONNECT_MAX_MS); reconAttemptsRef.current++; reconRef.current = setTimeout(() => { if (mountedRef.current) connect(); }, delay); };
+		ws.onclose = () => { if (!mountedRef.current) return; cleanup(); setPhase("offline"); urlIdxRef.current = (urlIdxRef.current + 1) % WS_URLS.length; reconRef.current = setTimeout(() => { if (mountedRef.current) connect(); }, RECONNECT_MS); };
 		ws.onerror = () => { ws.close(); };
 	}, [cleanup, pushEvent]);
 
@@ -694,40 +556,49 @@ export function AgentHabitat() {
 			<div className="max-w-[1200px] mx-auto min-h-screen px-4 py-5">
 
 				{/* ── Header ── */}
-				<header className="flex items-center justify-between gap-3 mb-6">
-					<div className="flex items-center gap-3">
-						<span className="text-sm tracking-[0.22em] text-[#7f95bb]">LIVEODI</span>
-						{returnVisit && <span className="text-xs px-2 py-0.5 rounded-full bg-[#6f6dff22] text-[#b8b6ff] border border-[#6f6dff44]">retorno</span>}
-						{isSpeaking && <span className="text-xs px-2 py-0.5 rounded-full bg-[#ec489922] text-[#ec4899] border border-[#ec489944] animate-pulse">hablando</span>}
-						{liveManifest && (
+				<header className={`flex items-center justify-between gap-2 mb-4 ${isMobile ? "flex-wrap" : ""}`}>
+					<div className="flex items-center gap-2">
+						<span className={`tracking-[0.22em] text-[#7f95bb] ${isMobile ? "text-xs" : "text-sm"}`}>LIVEODI</span>
+						{returnVisit && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#6f6dff22] text-[#b8b6ff] border border-[#6f6dff44]">retorno</span>}
+						{isSpeaking && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#ec489922] text-[#ec4899] border border-[#ec489944] animate-pulse">hablando</span>}
+					</div>
+					<div className="flex items-center gap-2">
+						{!isMobile && liveManifest && (
 							<span className="text-xs text-[#4a5f7f]">
 								{liveManifest.stores_active || 0} tiendas · {(liveManifest.products_total || 0).toLocaleString()} productos · {liveManifest.services_alive}/{liveManifest.services_total} servicios
 							</span>
 						)}
-					</div>
-					<div className="flex items-center gap-3">
-						<span className="text-sm text-[#b6e5ff] opacity-90">{statusLabel[phase]}</span>
+						<span className={`text-[#b6e5ff] opacity-90 ${isMobile ? "text-xs" : "text-sm"}`}>{statusLabel[phase]}</span>
 						<span className={`w-2.5 h-2.5 rounded-full ${statusDot[phase]}`} />
 					</div>
+					{isMobile && liveManifest && (
+						<span className="text-[9px] text-[#4a5f7f] w-full">
+							{liveManifest.services_alive}/{liveManifest.services_total} servicios · {liveManifest.stores_active || 0} tiendas · {(liveManifest.products_total || 0).toLocaleString()} prod
+						</span>
+					)}
 				</header>
 
 				{/* ── Grid ── */}
 				<div className="grid gap-6" style={{ gridTemplateColumns: isMobile ? "1fr" : showSidebar ? "180px 1fr 300px" : "180px 1fr" }}>
 
-					{/* ── Flame column ── */}
-					<section className={`flex flex-col items-center ${isMobile ? "pt-2 flex-row gap-3 justify-center" : "pt-8"}`}>
-						<div className={isMobile ? "w-16 h-16 rounded-full" : "w-28 h-28 rounded-full"} style={{
+					{/* ── Flame + controls ── */}
+					<section className={`flex flex-col items-center ${isMobile ? "py-2" : "pt-8"}`}>
+						{/* Flame */}
+						<div className={isMobile ? "w-14 h-14 rounded-full" : "w-28 h-28 rounded-full"} style={{
 							background: isSpeaking ? "radial-gradient(circle at 50% 35%, #ec4899 0%, #be185d 40%, #6f6dff 70%, transparent 100%)" : flameGradient[phase],
 							boxShadow: isSpeaking ? "0 0 40px #ec489988, inset 0 0 30px #ec489944" : flameShadow[phase],
 							animation: phase === "live" ? "breathe 4s ease-in-out infinite" : "none",
 							transition: "box-shadow 0.6s, background 0.6s",
 						}} />
-						<p className="text-xs text-[#7f95bb] mt-3 text-center">
-							{phase === "live" && heartbeats > 0 && `${heartbeats} latidos`}
-						</p>
+						{!isMobile && (
+							<p className="text-xs text-[#7f95bb] mt-3 text-center">
+								{phase === "live" && heartbeats > 0 && `${heartbeats} latidos`}
+							</p>
+						)}
+						{/* Three doors */}
 						{phase === "live" && (
 							<>
-								<div className="flex gap-1.5 mt-3 flex-wrap justify-center">
+								<div className={`flex gap-1.5 mt-2 flex-wrap justify-center ${isMobile ? "mt-1" : "mt-3"}`}>
 									{([
 										{ id: "voice" as InputMode, icon: "\uD83C\uDF99", label: "Voz" },
 										{ id: "text" as InputMode, icon: "\u2328", label: "Texto" },
@@ -737,27 +608,29 @@ export function AgentHabitat() {
 											if (door.id === "signs") return;
 											if (door.id === "voice") { setInputMode("voice"); if (!isListening) startContinuousListening(); }
 											else if (door.id === "text") { stopContinuousListening(); setInputMode("text"); }
-										}} className={`text-[10px] px-2.5 py-1.5 rounded-lg border cursor-pointer transition-all ${
+										}} className={`text-[10px] px-2 py-1 rounded-lg border cursor-pointer transition-all ${
 											inputMode === door.id ? "bg-[#49c2ff15] border-[#49c2ff44] text-[#dbe7ff]" : door.id === "signs" ? "bg-transparent border-[#1a2a42] text-[#3a4f6f] opacity-40 cursor-default" : "bg-transparent border-[#1a2a42] text-[#4a5f7f] hover:text-[#7f95bb]"
 										}`}>
-											<span className="text-sm">{door.icon}</span> {door.label}
+											{door.icon} {door.label}
 										</button>
 									))}
-									<button onClick={() => {}} className="text-[10px] px-2 py-1.5 rounded-lg border border-[#1a2a42] bg-transparent text-[#3a4f6f] opacity-40 cursor-default">
-										<span className="text-sm">&#x267F;</span> Adaptarme
-									</button>
+									{!isMobile && (
+										<button onClick={() => {}} className="text-[10px] px-2 py-1 rounded-lg border border-[#1a2a42] bg-transparent text-[#3a4f6f] opacity-40 cursor-default">
+											&#x267F; Adaptarme
+										</button>
+									)}
 								</div>
-								<button onClick={() => setShowSidebar((v) => !v)} className="mt-2 text-[10px] text-[#49c2ff] hover:text-[#9be2ff] transition-colors cursor-pointer bg-transparent border-none">
-									{showSidebar ? "Ocultar panel" : "Panel"}
+								<button onClick={() => setShowSidebar((v) => !v)} className="mt-1 text-[10px] text-[#49c2ff] hover:text-[#9be2ff] transition-colors cursor-pointer bg-transparent border-none">
+									{showSidebar ? "Ocultar" : "Panel"}
 								</button>
 							</>
 						)}
-						<p className="text-[9px] text-[#4a5f7f] mt-2">{WS_URLS[wsUrlIdx]?.replace("wss://", "").replace("ws://", "")}</p>
+						{!isMobile && <p className="text-[9px] text-[#4a5f7f] mt-2">{WS_URLS[wsUrlIdx]?.replace("wss://", "").replace("ws://", "")}</p>}
 					</section>
 
 					{/* ── Events + Input + Flow player ── */}
-					<section className={`flex flex-col ${isMobile ? "min-h-0 flex-1" : "max-h-[80vh]"}`}>
-						<h2 className="text-xs tracking-[0.18em] text-[#7f95bb] mb-3">EVENTOS</h2>
+					<section className={`flex flex-col ${isMobile ? "max-h-[65vh]" : "max-h-[80vh]"}`}>
+						{!isMobile && <h2 className="text-xs tracking-[0.18em] text-[#7f95bb] mb-3">EVENTOS</h2>}
 
 						{/* Voice / Text Input */}
 						{phase === "live" && (
@@ -903,7 +776,7 @@ export function AgentHabitat() {
 
 					{/* ── Sidebar: Flows / Manifest / Stats ── */}
 					{showSidebar && !isMobile && (
-						<aside className="rounded-lg border border-[#1a2a42] bg-[#0a1628] p-3 overflow-y-scroll" style={{ height: "calc(100vh - 120px)", WebkitOverflowScrolling: "touch" }}>
+						<aside className="overflow-y-auto max-h-[80vh] rounded-lg border border-[#1a2a42] bg-[#0a1628] p-3">
 							{/* Tabs */}
 							<div className="flex gap-1 mb-3">
 								{(["flows", "manifest", "stats"] as SideTab[]).map((t) => (
@@ -1081,290 +954,10 @@ export function AgentHabitat() {
 										</div>
 									)}
 
-									{/* === BILLING === */}
-									{liveManifest?.billing?.status === "operativo" ? (
-										<div className="rounded-lg p-2 border border-[#4caf5022]" style={{ background: "#4caf5008" }}>
-											<div className="flex items-center justify-between">
-												<div className="flex items-center gap-1.5">
-													<span className="text-xs font-semibold text-[#4caf50]">BILLING</span>
-													<span className="text-[9px] px-1 rounded bg-[#4caf5015] text-[#4caf50]">
-														{liveManifest.billing.medicion_solo ? "medición" : "activo"}
-													</span>
-												</div>
-												<FreshnessTag data={liveManifest.billing} />
-											</div>
-											<div className="grid grid-cols-3 gap-1 mt-1.5">
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#4caf50]">{liveManifest.billing.total_ventas}</div>
-													<div className="text-[8px] text-[#4a5f7f]">ventas</div>
-												</div>
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#4caf50]">${((liveManifest.billing.total_monto || 0) / 1000).toFixed(0)}K</div>
-													<div className="text-[8px] text-[#4a5f7f]">revenue</div>
-												</div>
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#ff9800]">${((liveManifest.billing.total_comision || 0) / 1000).toFixed(1)}K</div>
-													<div className="text-[8px] text-[#4a5f7f]">comisión</div>
-												</div>
-											</div>
-										</div>
-									) : liveManifest?.billing?._fetched_at ? <DegradedCard name="BILLING" data={liveManifest.billing} /> : null}
-
-									{/* === GUARDIAN === */}
-									{liveManifest?.guardian?.status === "operativo" ? (
-										<div className="rounded-lg p-2 border border-[#ff980022]" style={{ background: "#ff980008" }}>
-											<div className="flex items-center justify-between">
-												<div className="flex items-center gap-1.5">
-													<span className="text-xs font-semibold text-[#ff9800]">GUARDIAN</span>
-													<span className="text-[9px] px-1 rounded bg-[#ff980015] text-[#ff9800]">
-														{liveManifest.guardian.services_summary?.alive || 0}/{liveManifest.guardian.services_summary?.total || 0} servicios
-													</span>
-												</div>
-												<FreshnessTag data={liveManifest.guardian} />
-											</div>
-											<div className="grid grid-cols-3 gap-1 mt-1.5">
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#ff9800]">{liveManifest.guardian.stores_total}</div>
-													<div className="text-[8px] text-[#4a5f7f]">tiendas</div>
-												</div>
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#3af08f]">{(liveManifest.guardian.products_active || 0).toLocaleString()}</div>
-													<div className="text-[8px] text-[#4a5f7f]">activos</div>
-												</div>
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#49c2ff]">{(liveManifest.guardian.products_total || 0).toLocaleString()}</div>
-													<div className="text-[8px] text-[#4a5f7f]">total</div>
-												</div>
-											</div>
-										</div>
-									) : liveManifest?.guardian?._fetched_at ? <DegradedCard name="GUARDIAN" data={liveManifest.guardian} /> : null}
-
-									{/* === PIPELINE === */}
-									{liveManifest?.pipeline?.status === "operativo" && (
-										<div className="rounded-lg p-2 border border-[#ffcc0022]" style={{ background: "#ffcc0008" }}>
-											<div className="flex items-center justify-between">
-												<div className="flex items-center gap-1.5">
-													<span className="text-xs font-semibold text-[#ffcc00]">PIPELINE</span>
-													<span className="text-[9px] px-1 rounded bg-[#ffcc0015] text-[#ffcc00]">{liveManifest.pipeline.version}</span>
-												</div>
-												<span className="text-[10px] text-[#4a5f7f]">{liveManifest.pipeline.steps} steps</span>
-											</div>
-											<div className="text-[10px] text-[#8ca0c6] mt-1">
-												{liveManifest.pipeline.total_ejecuciones} ejecuciones
-											</div>
-											{liveManifest.pipeline.last_execution && (
-												<div className="text-[9px] text-[#4a5f7f] mt-0.5">
-													Última: {liveManifest.pipeline.last_execution.store} → {liveManifest.pipeline.last_execution.status}
-													{" "}({liveManifest.pipeline.last_execution.products_out} productos)
-												</div>
-											)}
-											{liveManifest.pipeline.by_store && (
-												<div className="flex flex-wrap gap-1 mt-1">
-													{liveManifest.pipeline.by_store.map((s: any) => (
-														<span key={s.store} className="text-[8px] px-1 py-0.5 rounded bg-[#1a2a42] text-[#8ca0c6]">
-															{s.store}: {s.runs}
-														</span>
-													))}
-												</div>
-											)}
-										</div>
-									)}
-
-									{/* === LEADS === */}
-									{liveManifest?.leads?.status === "operativo" && (
-										<div className="rounded-lg p-2 border border-[#26a69a22]" style={{ background: "#26a69a08" }}>
-											<div className="flex items-center justify-between">
-												<div className="flex items-center gap-1.5">
-													<span className="text-xs font-semibold text-[#26a69a]">LEADS</span>
-													<span className="text-[9px] px-1 rounded bg-[#26a69a15] text-[#26a69a]">{liveManifest.leads.total} capturados</span>
-												</div>
-											</div>
-											{liveManifest.leads.by_industry && (
-												<div className="flex gap-2 mt-1">
-													{liveManifest.leads.by_industry.map((ind: any) => (
-														<div key={ind.industry_id} className="text-center">
-															<div className="text-[11px] font-semibold text-[#26a69a]">{ind.total}</div>
-															<div className="text-[8px] text-[#4a5f7f]">{ind.industry_id}</div>
-														</div>
-													))}
-												</div>
-											)}
-										</div>
-									)}
-
-									{/* === TURISMO === */}
-									{liveManifest?.tourism?.status === "operativo" && (
-										<div className="rounded-lg p-2 border border-[#ff704322]" style={{ background: "#ff704308" }}>
-											<div className="flex items-center justify-between">
-												<div className="flex items-center gap-1.5">
-													<span className="text-xs font-semibold text-[#ff7043]">TURISMO</span>
-													<span className="text-[9px] px-1 rounded bg-[#ff704315] text-[#ff7043]">{liveManifest.tourism.pisos_construidos} pisos</span>
-												</div>
-												<span className="text-[10px] text-[#4a5f7f]">{liveManifest.tourism.crons_activos} crons</span>
-											</div>
-											<div className="grid grid-cols-4 gap-1 mt-1.5">
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#ff7043]">{liveManifest.tourism.bookings}</div>
-													<div className="text-[8px] text-[#4a5f7f]">bookings</div>
-												</div>
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#26a69a]">{liveManifest.tourism.leads}</div>
-													<div className="text-[8px] text-[#4a5f7f]">leads</div>
-												</div>
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#49c2ff]">{liveManifest.tourism.quotes}</div>
-													<div className="text-[8px] text-[#4a5f7f]">quotes</div>
-												</div>
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#8ca0c6]">{liveManifest.tourism.events}</div>
-													<div className="text-[8px] text-[#4a5f7f]">events</div>
-												</div>
-											</div>
-										</div>
-									)}
-
-									{/* === TIENDAS DEPTH === */}
-									{liveManifest?.stores_depth?.stores?.length > 0 && (
-										<div className="rounded-lg p-2 border border-[#9c27b022]" style={{ background: "#9c27b008" }}>
-											<div className="flex items-center gap-1.5 mb-1">
-												<span className="text-xs font-semibold text-[#9c27b0]">TIENDAS</span>
-												<span className="text-[9px] px-1 rounded bg-[#9c27b015] text-[#9c27b0]">
-													{liveManifest.stores_depth.total} snapshots
-												</span>
-											</div>
-											<div className="space-y-0.5">
-												{liveManifest.stores_depth.stores.map((s: any) => (
-													<div key={s.store_id} className="flex items-center justify-between text-[9px]">
-														<span className="text-[#8ca0c6] font-medium">{s.store_id?.toUpperCase()}</span>
-														<div className="flex items-center gap-1.5">
-															<span className={`px-1 rounded ${s.grade === 'A+' ? 'bg-[#3af08f15] text-[#3af08f]' : s.grade === 'A' ? 'bg-[#49c2ff15] text-[#49c2ff]' : 'bg-[#ffcc0015] text-[#ffcc00]'}`}>
-																{s.grade || '—'}
-															</span>
-															<span className="text-[#4a5f7f]">{s.active} act</span>
-															<span className="text-[#4a5f7f]">img:{s.image_coverage}%</span>
-															{s.gaps > 0 && <span className="text-[#ff9800]">{s.gaps} gaps</span>}
-														</div>
-													</div>
-												))}
-											</div>
-										</div>
-									)}
-
-									{/* === SELF-HEALING === */}
-									{liveManifest?.self_healing?.status === "operativo" && (
-										<div className="rounded-lg p-2 border border-[#00bcd422]" style={{ background: "#00bcd408" }}>
-											<div className="flex items-center justify-between">
-												<div className="flex items-center gap-1.5">
-													<span className="text-xs font-semibold text-[#00bcd4]">SELF-HEALING</span>
-												</div>
-												<span className="text-[10px] text-[#4a5f7f]">
-													{liveManifest.self_healing.gaps_total || 0} gaps detectados
-												</span>
-											</div>
-											{liveManifest.self_healing.stores?.length > 0 && (
-												<div className="space-y-0.5 mt-1">
-													{liveManifest.self_healing.stores.map((s: any) => (
-														<div key={s.store_id} className="flex items-center justify-between text-[9px]">
-															<span className="text-[#8ca0c6]">{s.store_id?.toUpperCase()}</span>
-															<div className="flex items-center gap-1.5">
-																<span className="text-[#4a5f7f]">{s.grade}</span>
-																<span className="text-[#ff9800]">{s.gaps_count} gaps</span>
-															</div>
-														</div>
-													))}
-												</div>
-											)}
-										</div>
-									)}
-
-									{/* === RADAR LINK === */}
-									<div className="rounded-lg p-2 border border-[#f9731622]" style={{ background: "#f9731608" }}>
-										<div className="flex items-center justify-between">
-											<div className="flex items-center gap-1.5">
-												<span className="text-xs font-semibold text-[#f97316]">RADAR</span>
-												<span className="text-[9px] px-1 rounded bg-[#f9731615] text-[#f97316]">v3.2.0</span>
-											</div>
-											<a href="https://radar.liveodi.com" target="_blank" rel="noopener noreferrer"
-												className="text-[9px] px-1.5 py-0.5 rounded bg-[#f9731620] text-[#f97316] hover:bg-[#f9731630] transition-colors">
-												Abrir Panel
-											</a>
-										</div>
-										<div className="text-[9px] text-[#4a5f7f] mt-0.5">
-											15 disciplinas · 33 juegos · guardian verde
-										</div>
-									</div>
-
-									{/* === LOG STATS === */}
-									{liveManifest?.log_stats?.total_logs > 0 && (
-										<div className="rounded-lg p-2 border border-[#78909c22]" style={{ background: "#78909c08" }}>
-											<div className="flex items-center justify-between">
-												<div className="flex items-center gap-1.5">
-													<span className="text-xs font-semibold text-[#78909c]">LOGS</span>
-													<span className="text-[9px] px-1 rounded bg-[#78909c15] text-[#78909c]">
-														{liveManifest.log_stats.active_logs}/{liveManifest.log_stats.total_logs} activos
-													</span>
-												</div>
-												<span className="text-[10px] text-[#4a5f7f]">
-													{liveManifest.log_stats.total_size_kb}KB
-												</span>
-											</div>
-											<div className="text-[9px] text-[#4a5f7f] mt-0.5">
-												{liveManifest.log_stats.total_lines} líneas registradas
-											</div>
-											<div className="flex flex-wrap gap-1 mt-1">
-												{liveManifest.log_stats.logs && Object.entries(liveManifest.log_stats.logs).map(([name, info]: [string, any]) => (
-													<span key={name} className={`text-[7px] px-1 py-0.5 rounded ${info.active ? 'bg-[#3af08f15] text-[#3af08f]' : 'bg-[#1a2a42] text-[#4a5f7f]'}`}>
-														{name}
-													</span>
-												))}
-											</div>
-										</div>
-									)}
-
-									{/* === NARRATIVA VIVA DEL ORGANISMO === */}
-									{liveManifest.narrative && (
-										<div className="rounded-lg p-2.5 border border-[#49c2ff22] mt-1" style={{ background: "linear-gradient(135deg, #49c2ff06, #03070d)" }}>
-											<div className="text-[10px] text-[#8ca0c6] font-medium mb-1.5">
-												{liveManifest.narrative.summary}
-											</div>
-											<div className="space-y-1">
-												{[
-													{ key: "billing", icon: "●", color: "#4caf50" },
-													{ key: "guardian", icon: "●", color: liveManifest.narrative.guardian_health === "verde" ? "#3af08f" : liveManifest.narrative.guardian_health === "amarillo" ? "#ffcc00" : "#ff9800" },
-													{ key: "pipeline", icon: "●", color: "#ffcc00" },
-													{ key: "ces", icon: "●", color: "#ef5350" },
-													{ key: "leads", icon: "●", color: "#26a69a" },
-													{ key: "tourism", icon: "●", color: "#ff7043" },
-													{ key: "logs", icon: "●", color: "#78909c" },
-												].map(({ key, icon, color }) => {
-													const text = liveManifest.narrative[key];
-													const voice = liveManifest.narrative[`${key}_voice`];
-													if (!text) return null;
-													return (
-														<div key={key} className="text-[9px]">
-															<span style={{ color }}>{icon}</span>
-															<span className="text-[#8ca0c6] ml-1">{text}</span>
-															{voice && <span className="text-[#4a5f7f] ml-1 italic">— {voice}</span>}
-														</div>
-													);
-												})}
-											</div>
-											{liveManifest.narrative.summary_voice && (
-												<div className="text-[9px] text-[#49c2ff] mt-1.5 italic">
-													"{liveManifest.narrative.summary_voice}"
-												</div>
-											)}
-										</div>
-									)}
-
-									{/* === FRESHNESS === */}
-									<div className="text-[10px] pt-1.5 mt-1 border-t border-[#1a2a42]">
-										<div className="flex items-center justify-between">
-											<span className="text-[8px] text-[#3a4f6f]">v{liveManifest.version}</span>
-											{liveManifest.generated_at && (
-												<span className="text-[8px] text-[#3af08f]">{timeAgo(liveManifest.generated_at)}</span>
-											)}
-										</div>
+									<div className="text-[10px] text-[#4a5f7f] pt-2 border-t border-[#1a2a42]">
+										<p>v{liveManifest.version} · {liveManifest.flows_available} flows</p>
+										<p>device: {deviceRef.current.slice(0, 16)}</p>
+										<p>session: {sessionRef.current.slice(0, 12)}...</p>
 									</div>
 								</div>
 							)}
@@ -1407,259 +1000,70 @@ export function AgentHabitat() {
 
 				{/* Mobile sidebar — inline below grid */}
 				{showSidebar && isMobile && (
-					<div className="fixed inset-0 z-50 bg-[#03070dee] overflow-y-scroll" style={{ WebkitOverflowScrolling: "touch" }}>
-						<div className="max-w-md mx-auto p-4">
-							<div className="flex gap-1 mb-3 items-center">
-								{(["manifest", "flows", "stats"] as SideTab[]).map((t) => (
-									<button key={t} onClick={() => setSideTab(t)}
-										className={`text-[10px] px-2 py-1 rounded-full border cursor-pointer transition-colors ${sideTab === t ? "bg-[#49c2ff22] border-[#49c2ff44] text-[#49c2ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f]"}`}>
-										{t === "flows" ? `Flujos` : t === "manifest" ? "Manifest" : "Stats"}
-									</button>
-								))}
-								<button onClick={() => setShowSidebar(false)} className="ml-auto text-xs text-[#4a5f7f] bg-transparent border-none cursor-pointer px-2 py-1">&#x2715; Cerrar</button>
-							</div>
-
-							{sideTab === "manifest" && liveManifest && (
-								<div className="grid gap-3">
-									{/* Services */}
+					<div className="mt-3 rounded-lg border border-[#1a2a42] bg-[#0a1628] p-3 overflow-y-auto max-h-[50vh]">
+						<div className="flex gap-1 mb-3">
+							{(["flows", "manifest", "stats"] as SideTab[]).map((t) => (
+								<button key={t} onClick={() => setSideTab(t)}
+									className={`text-[10px] px-2 py-1 rounded-full border cursor-pointer transition-colors ${sideTab === t ? "bg-[#49c2ff22] border-[#49c2ff44] text-[#49c2ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f]"}`}>
+									{t === "flows" ? `Flujos` : t === "manifest" ? "Manifest" : "Stats"}
+								</button>
+							))}
+							<button onClick={() => setShowSidebar(false)} className="ml-auto text-[10px] text-[#4a5f7f] bg-transparent border-none cursor-pointer">&#x2715;</button>
+						</div>
+						{/* Manifest mobile */}
+						{sideTab === "manifest" && liveManifest && (
+							<div className="grid gap-2">
+								<div className="text-[10px] text-[#49c2ff] font-semibold">Servicios ({liveManifest.services_alive}/{liveManifest.services_total})</div>
+								<div className="grid grid-cols-2 gap-1">
+									{Object.entries(liveManifest.services || {}).map(([k, v]: [string, any]) => (
+										<div key={k} className="flex items-center justify-between text-[10px]">
+											<span className="text-[#8ca0c6]">{k}</span>
+											<span style={{ color: SVC_COLOR[v.status] || "#4a5f7f" }}>{v.status === "alive" ? "\u25CF" : "\u25CB"}</span>
+										</div>
+									))}
+								</div>
+								{stores.filter(s => (s.active || 0) > 0).length > 0 && (
 									<div>
-										<h4 className="text-[10px] text-[#49c2ff] font-semibold mb-1.5">
-											Servicios ({liveManifest.services_alive}/{liveManifest.services_total})
-										</h4>
-										<div className="grid grid-cols-2 gap-1">
-											{Object.entries(liveManifest.services || {}).map(([name, svc]: [string, any]) => (
-												<div key={name} className="flex items-center gap-1.5 text-[10px]">
-													<span className="w-1.5 h-1.5 rounded-full" style={{ background: svc.status === "alive" ? "#3af08f" : svc.status === "degraded" ? "#ffcc00" : "#ff4444" }} />
-													<span className="text-[#8ca0c6]">{name}</span>
-												</div>
-											))}
-										</div>
-									</div>
-
-									{/* Billing */}
-									{liveManifest?.billing?.status === "operativo" && (
-										<div className="rounded-lg p-2 border border-[#4caf5022]" style={{ background: "#4caf5008" }}>
-											<div className="flex items-center gap-1.5">
-												<span className="text-xs font-semibold text-[#4caf50]">BILLING</span>
-												<span className="text-[9px] px-1 rounded bg-[#4caf5015] text-[#4caf50]">{liveManifest.billing.medicion_solo ? "medición" : "activo"}</span>
-											</div>
-											<div className="grid grid-cols-3 gap-1 mt-1.5">
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#4caf50]">{liveManifest.billing.total_ventas}</div>
-													<div className="text-[8px] text-[#4a5f7f]">ventas</div>
-												</div>
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#4caf50]">${((liveManifest.billing.total_monto || 0) / 1000).toFixed(0)}K</div>
-													<div className="text-[8px] text-[#4a5f7f]">revenue</div>
-												</div>
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#ff9800]">${((liveManifest.billing.total_comision || 0) / 1000).toFixed(1)}K</div>
-													<div className="text-[8px] text-[#4a5f7f]">comisión</div>
-												</div>
-											</div>
-										</div>
-									)}
-
-									{/* Guardian */}
-									{liveManifest?.guardian?.status === "operativo" && (
-										<div className="rounded-lg p-2 border border-[#ff980022]" style={{ background: "#ff980008" }}>
-											<div className="flex items-center gap-1.5">
-												<span className="text-xs font-semibold text-[#ff9800]">GUARDIAN</span>
-												<span className="text-[9px] px-1 rounded bg-[#ff980015] text-[#ff9800]">{liveManifest.guardian.services_summary?.alive || 0}/{liveManifest.guardian.services_summary?.total || 0} srv</span>
-											</div>
-											<div className="grid grid-cols-3 gap-1 mt-1.5">
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#ff9800]">{liveManifest.guardian.stores_total}</div>
-													<div className="text-[8px] text-[#4a5f7f]">tiendas</div>
-												</div>
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#3af08f]">{(liveManifest.guardian.products_active || 0).toLocaleString()}</div>
-													<div className="text-[8px] text-[#4a5f7f]">activos</div>
-												</div>
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#49c2ff]">{(liveManifest.guardian.products_total || 0).toLocaleString()}</div>
-													<div className="text-[8px] text-[#4a5f7f]">total</div>
-												</div>
-											</div>
-										</div>
-									)}
-
-									{/* CES */}
-									{liveManifest?.ces && (
-										<div className="rounded-lg p-2 border border-[#ef535022]" style={{ background: "#ef535008" }}>
-											<div className="flex items-center gap-1.5">
-												<span className="text-xs font-semibold text-[#ef5350]">CES</span>
-												<span className="text-[9px] px-1 rounded bg-[#ef535015] text-[#ef5350]">{liveManifest.ces.status}</span>
-											</div>
-											<div className="grid grid-cols-3 gap-1 mt-1.5">
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#3af08f]">{liveManifest.ces.allowed}</div>
-													<div className="text-[8px] text-[#4a5f7f]">allowed</div>
-												</div>
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#ef5350]">{liveManifest.ces.blocked}</div>
-													<div className="text-[8px] text-[#4a5f7f]">blocked</div>
-												</div>
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#ff9800]">{liveManifest.ces.overrides}</div>
-													<div className="text-[8px] text-[#4a5f7f]">override</div>
-												</div>
-											</div>
-										</div>
-									)}
-
-									{/* Pipeline */}
-									{liveManifest?.pipeline?.status === "operativo" && (
-										<div className="rounded-lg p-2 border border-[#ffcc0022]" style={{ background: "#ffcc0008" }}>
-											<div className="flex items-center gap-1.5">
-												<span className="text-xs font-semibold text-[#ffcc00]">PIPELINE</span>
-												<span className="text-[9px] px-1 rounded bg-[#ffcc0015] text-[#ffcc00]">{liveManifest.pipeline.version}</span>
-											</div>
-											<div className="text-[10px] text-[#8ca0c6] mt-1">{liveManifest.pipeline.total_ejecuciones} ejecuciones</div>
-											{liveManifest.pipeline.last_execution && (
-												<div className="text-[9px] text-[#4a5f7f] mt-0.5">
-													Última: {liveManifest.pipeline.last_execution.store} → {liveManifest.pipeline.last_execution.status}
-												</div>
-											)}
-										</div>
-									)}
-
-									{/* Leads */}
-									{liveManifest?.leads?.status === "operativo" && (
-										<div className="rounded-lg p-2 border border-[#26a69a22]" style={{ background: "#26a69a08" }}>
-											<div className="flex items-center gap-1.5">
-												<span className="text-xs font-semibold text-[#26a69a]">LEADS</span>
-												<span className="text-[9px] px-1 rounded bg-[#26a69a15] text-[#26a69a]">{liveManifest.leads.total} capturados</span>
-											</div>
-										</div>
-									)}
-
-									{/* Tourism */}
-									{liveManifest?.tourism?.status === "operativo" && (
-										<div className="rounded-lg p-2 border border-[#ff704322]" style={{ background: "#ff704308" }}>
-											<div className="flex items-center gap-1.5">
-												<span className="text-xs font-semibold text-[#ff7043]">TURISMO</span>
-												<span className="text-[9px] px-1 rounded bg-[#ff704315] text-[#ff7043]">{liveManifest.tourism.pisos_construidos} pisos</span>
-											</div>
-											<div className="grid grid-cols-3 gap-1 mt-1.5">
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#ff7043]">{liveManifest.tourism.bookings}</div>
-													<div className="text-[8px] text-[#4a5f7f]">bookings</div>
-												</div>
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#26a69a]">{liveManifest.tourism.leads}</div>
-													<div className="text-[8px] text-[#4a5f7f]">leads</div>
-												</div>
-												<div className="text-center">
-													<div className="text-[11px] font-semibold text-[#8ca0c6]">{liveManifest.tourism.events}</div>
-													<div className="text-[8px] text-[#4a5f7f]">events</div>
-												</div>
-											</div>
-										</div>
-									)}
-
-									{/* Radar */}
-									<div className="rounded-lg p-2 border border-[#f9731622]" style={{ background: "#f9731608" }}>
-										<div className="flex items-center justify-between">
-											<div className="flex items-center gap-1.5">
-												<span className="text-xs font-semibold text-[#f97316]">RADAR</span>
-												<span className="text-[9px] px-1 rounded bg-[#f9731615] text-[#f97316]">v3.2.0</span>
-											</div>
-											<a href="https://radar.liveodi.com" target="_blank" rel="noopener noreferrer"
-												className="text-[9px] px-1.5 py-0.5 rounded bg-[#f9731620] text-[#f97316]">
-												Abrir
-											</a>
-										</div>
-									</div>
-
-									{/* Log Stats */}
-									{liveManifest?.log_stats?.total_logs > 0 && (
-										<div className="rounded-lg p-2 border border-[#78909c22]" style={{ background: "#78909c08" }}>
-											<div className="flex items-center gap-1.5">
-												<span className="text-xs font-semibold text-[#78909c]">LOGS</span>
-												<span className="text-[9px] px-1 rounded bg-[#78909c15] text-[#78909c]">{liveManifest.log_stats.active_logs}/{liveManifest.log_stats.total_logs} activos</span>
-												<span className="text-[9px] text-[#4a5f7f]">{liveManifest.log_stats.total_lines} líneas</span>
-											</div>
-										</div>
-									)}
-
-									{/* Version + freshness footer */}
-									<div className="text-[10px] pt-2 border-t border-[#1a2a42]">
-										<div className="flex items-center justify-between">
-											<span className="text-[#4a5f7f]">v{liveManifest.version} · {liveManifest.flows_available} flows</span>
-											{liveManifest.generated_at && (
-												<span className="text-[8px] text-[#3af08f]">{timeAgo(liveManifest.generated_at)}</span>
-											)}
-										</div>
-									</div>
-								</div>
-							)}
-
-							{sideTab === "flows" && (
-								<div className="grid gap-3">
-									{categories.map((cat: any) => {
-										const catFlows = (flows || []).filter((f: any) => f.category === cat.id);
-										if (catFlows.length === 0) return null;
-										return (
-											<div key={cat.id}>
-												<h4 className="text-[10px] font-semibold mb-1.5" style={{ color: cat.color || "#7f95bb" }}>
-													{cat.icon} {cat.label} ({catFlows.length})
-												</h4>
-												<div className="grid gap-1">
-													{catFlows.map((f: any) => (
-														<button key={f.id} onClick={() => { startFlow(f.id); setShowSidebar(false); }}
-															className="text-left rounded px-2 py-1.5 border border-[#1a2a42] bg-[#03070d] cursor-pointer w-full">
-															<div className="flex items-center gap-1.5">
-																<span className="text-xs">{f.icon}</span>
-																<span className="text-[11px] text-[#dbe7ff]">{f.label}</span>
-																<span className={`text-[9px] ml-auto px-1 rounded ${f.readiness === "live" ? "text-[#3af08f] bg-[#3af08f11]" : f.readiness === "partial" ? "text-[#ffcc00] bg-[#ffcc0011]" : "text-[#4a5f7f] bg-[#4a5f7f11]"}`}>
-																	{f.readiness}
-																</span>
-															</div>
-															<p className="text-[9px] text-[#4a5f7f] mt-0.5">{f.desc}</p>
-														</button>
-													))}
-												</div>
-											</div>
-										);
-									})}
-									{flows.length === 0 && <p className="text-[10px] text-[#4a5f7f]">Cargando flujos...</p>}
-								</div>
-							)}
-
-							{sideTab === "stats" && stats && (
-								<div className="grid gap-3">
-									<div className="grid grid-cols-2 gap-2">
-										{[
-											["Devices", stats.devices_total],
-											["Sessions", stats.sessions_total],
-											["Events", stats.events_total],
-											["Flows done", stats.flows_completed],
-										].map(([label, val]) => (
-											<div key={label as string} className="rounded border border-[#1a2a42] bg-[#03070d] p-2 text-center">
-												<p className="text-lg font-bold text-[#dbe7ff]">{(val as number)?.toLocaleString()}</p>
-												<p className="text-[9px] text-[#4a5f7f]">{label as string}</p>
+										<div className="text-[10px] text-[#ff9800] font-semibold mt-1">Tiendas</div>
+										{stores.filter(s => (s.active || 0) > 0).map((s, i) => (
+											<div key={i} className="flex justify-between text-[10px] text-[#8ca0c6]">
+												<span>{s.store_id}</span>
+												<span>{(s.active || 0).toLocaleString()} · {s.grade}</span>
 											</div>
 										))}
 									</div>
-									<div>
-										<h4 className="text-[10px] text-[#49c2ff] font-semibold mb-1.5">Events by source</h4>
-										<div className="grid gap-1">
-											{Object.entries(stats.events_by_source || {}).map(([src, count]: [string, any]) => (
-												<div key={src} className="flex items-center justify-between text-xs">
-													<span style={{ color: SOURCE_COLORS[src] || "#7f95bb" }}>{src}</span>
-													<span className="text-[#8ca0c6]">{count}</span>
-												</div>
-											))}
-										</div>
+								)}
+								{liveManifest.ces && (
+									<div className="flex justify-between text-[10px] mt-1">
+										<span className="text-[#ef5350] font-semibold">CES</span>
+										<span className="text-[#4a5f7f]">{liveManifest.ces.allowed}\u2705 {liveManifest.ces.blocked}\uD83D\uDED1 {liveManifest.ces.overrides}\u26A0\uFE0F</span>
 									</div>
-									<p className="text-[9px] text-[#4a5f7f]">{stats.sessions_active} sesiones activas</p>
-								</div>
-							)}
-							{sideTab === "stats" && !stats && (
-								<p className="text-[10px] text-[#4a5f7f]">Cargando stats...</p>
-							)}
-						</div>
+								)}
+							</div>
+						)}
+						{/* Stats mobile */}
+						{sideTab === "stats" && stats && (
+							<div className="grid grid-cols-2 gap-2">
+								{[["Devices", stats.devices_total], ["Sessions", stats.sessions_total], ["Events", stats.events_total], ["Flows", stats.flows_completed]].map(([l, v]) => (
+									<div key={l as string} className="rounded border border-[#1a2a42] bg-[#03070d] p-1.5 text-center">
+										<p className="text-sm font-bold text-[#dbe7ff]">{(v as number)?.toLocaleString()}</p>
+										<p className="text-[8px] text-[#4a5f7f]">{l as string}</p>
+									</div>
+								))}
+							</div>
+						)}
+						{/* Flows mobile */}
+						{sideTab === "flows" && (
+							<div className="grid gap-1">
+								{flows.slice(0, 10).map((f: any) => (
+									<button key={f.id} onClick={() => { startFlow(f.id); setShowSidebar(false); }}
+										className="text-left rounded px-2 py-1 border border-[#1a2a42] bg-[#03070d] text-[10px] cursor-pointer">
+										<span>{f.icon} {f.label}</span>
+										<span className={`ml-1 px-1 rounded ${f.readiness === "live" ? "text-[#3af08f]" : "text-[#4a5f7f]"}`}>{f.readiness}</span>
+									</button>
+								))}
+							</div>
+						)}
 					</div>
 				)}
 			</div>
