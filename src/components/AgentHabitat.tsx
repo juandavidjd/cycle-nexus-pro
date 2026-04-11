@@ -219,11 +219,15 @@ export function AgentHabitat() {
 	const speakText = useCallback(async (text: string, voice: string = "ramona") => {
 		if (!userHasInteracted || isPlayingRef.current || !text) return;
 		const truncated = text.length > 500 ? text.slice(0, 497) + "..." : text;
+		// OC-07 R3: Transition to ASSISTANT_SPEAKING
+		turnStateRef.current = "ASSISTANT_SPEAKING";
 		// Track what ODI says for anti-echo filter
 		recentOdiPhrasesRef.current = [...recentOdiPhrasesRef.current.slice(-5), truncated.toLowerCase()];
+		lastAssistantTextRef.current = truncated.toLowerCase();
+		lastAssistantTsRef.current = Date.now();
 		// Echo prevention: pause STT while speaking
 		const wasListening = !!recognitionRef.current;
-		if (wasListening) { try { recognitionRef.current?.stop(); } catch {} }
+		if (wasListening) { try { recognitionRef.current?.stop(); setIsListening(false); } catch {} }
 		// Cleanup previous audio
 		if (audioRef.current) {
 			audioRef.current.pause();
@@ -248,14 +252,31 @@ export function AgentHabitat() {
 				audioRef.current = audio;
 				audio.onended = () => {
 					isPlayingRef.current = false; setIsSpeaking(false); URL.revokeObjectURL(url);
+					// OC-07 R1+R3: COOLDOWN before reopening mic
+					turnStateRef.current = "COOLDOWN";
 					if (inputModeRef.current === "voice" && wasListening) {
-						setTimeout(() => { if (!isPlayingRef.current) { try { recognitionRef.current?.start(); setIsListening(true); } catch {} } }, 800);
+						setTimeout(() => {
+							if (!isPlayingRef.current && turnStateRef.current === "COOLDOWN") {
+								turnStateRef.current = "USER_IDLE";
+								try { recognitionRef.current?.start(); setIsListening(true); } catch {}
+							}
+						}, COOLDOWN_MS);
+					} else {
+						setTimeout(() => { turnStateRef.current = "USER_IDLE"; }, COOLDOWN_MS);
 					}
 				};
 				audio.onerror = () => {
 					isPlayingRef.current = false; setIsSpeaking(false);
+					turnStateRef.current = "COOLDOWN";
 					if (inputModeRef.current === "voice" && wasListening) {
-						setTimeout(() => { if (!isPlayingRef.current) { try { recognitionRef.current?.start(); setIsListening(true); } catch {} } }, 800);
+						setTimeout(() => {
+							if (!isPlayingRef.current && turnStateRef.current === "COOLDOWN") {
+								turnStateRef.current = "USER_IDLE";
+								try { recognitionRef.current?.start(); setIsListening(true); } catch {}
+							}
+						}, COOLDOWN_MS);
+					} else {
+						setTimeout(() => { turnStateRef.current = "USER_IDLE"; }, COOLDOWN_MS);
 					}
 				};
 				audio.src = url;
@@ -274,11 +295,38 @@ export function AgentHabitat() {
 	const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const inputModeRef = useRef<InputMode>("text");
+
+	// === OC-07 R3: Turn state machine ===
+	type TurnState = "USER_IDLE" | "USER_SPEAKING" | "ASSISTANT_THINKING" | "ASSISTANT_SPEAKING" | "COOLDOWN";
+	const turnStateRef = useRef<TurnState>("USER_IDLE");
+	const lastAssistantTextRef = useRef("");
+	const lastAssistantTsRef = useRef(0);
+	const COOLDOWN_MS = 1200;
 	const latestTextRef = useRef("");
 
 	const handleSend = useCallback(async (text?: string) => {
 		const msg = (text || chatInput).trim();
 		if (!msg || isSending) return;
+		// OC-07 R3: Block input during ASSISTANT_SPEAKING and COOLDOWN
+		if (turnStateRef.current === "ASSISTANT_SPEAKING" || turnStateRef.current === "COOLDOWN") return;
+		// OC-07 R2: N-gram echo guard (frontend layer)
+		const elapsed = Date.now() - lastAssistantTsRef.current;
+		if (elapsed < 3000 && lastAssistantTextRef.current) {
+			const ngram = (s: string, n: number = 3) => {
+				const w = s.toLowerCase().replace(/[^a-záéíóúñü\s]/gi, "").split(/\s+/).filter(Boolean);
+				const grams = new Set<string>();
+				for (let i = 0; i <= w.length - n; i++) grams.add(w.slice(i, i + n).join(" "));
+				return grams;
+			};
+			const userNg = ngram(msg);
+			const odiNg = ngram(lastAssistantTextRef.current);
+			if (odiNg.size > 0 && userNg.size > 0) {
+				let overlap = 0;
+				userNg.forEach(g => { if (odiNg.has(g)) overlap++; });
+				if (overlap / odiNg.size > 0.5) return; // echo detected, discard silently
+			}
+		}
+		turnStateRef.current = "ASSISTANT_THINKING";
 		setChatInput("");
 		setIsSending(true);
 		pushEvent({ event_id: `user_${Date.now()}`, ts: new Date().toISOString(), source: "agent", type: "user_message", payload: { text: msg } });
@@ -292,10 +340,17 @@ export function AgentHabitat() {
 				const responseText = data.response || "";
 				const voice = data.voice || "ramona";
 				pushEvent({ event_id: `chat_${Date.now()}`, ts: new Date().toISOString(), source: "chat", type: "message", voice, mode: data.mode || "commerce", payload: { text: responseText } });
-				if (inputModeRef.current === "voice" && responseText) speakText(responseText, voice);
+				if (inputModeRef.current === "voice" && responseText) {
+					speakText(responseText, voice); // speakText sets ASSISTANT_SPEAKING
+				} else {
+					turnStateRef.current = "USER_IDLE"; // text mode: ready for next input
+				}
+			} else {
+				turnStateRef.current = "USER_IDLE";
 			}
 		} catch {
 			pushEvent({ event_id: `err_${Date.now()}`, ts: new Date().toISOString(), source: "agent", type: "error", payload: { text: "No pude conectar con el chat" } });
+			turnStateRef.current = "USER_IDLE";
 		}
 		setIsSending(false);
 	}, [chatInput, isSending, inputMode, pushEvent, speakText]);
@@ -317,7 +372,8 @@ export function AgentHabitat() {
 		recognition.continuous = true;
 		recognition.interimResults = true;
 		recognition.onresult = (event: any) => {
-			if (isPlayingRef.current) return;
+			// OC-07 R1+R3: Block STT results during TTS or cooldown
+			if (isPlayingRef.current || turnStateRef.current === "ASSISTANT_SPEAKING" || turnStateRef.current === "COOLDOWN") return;
 			// Get the latest result only (last in array)
 			const last = event.results[event.results.length - 1];
 			if (!last) return;
@@ -332,7 +388,7 @@ export function AgentHabitat() {
 			// Silence timer: 2.5s after last activity, send and restart recognition
 			if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
 			silenceTimerRef.current = setTimeout(() => {
-				if (isPlayingRef.current) return;
+				if (isPlayingRef.current || turnStateRef.current === "ASSISTANT_SPEAKING" || turnStateRef.current === "COOLDOWN") return;
 				const t = latestTextRef.current || text;
 				latestTextRef.current = "";
 				if (!t || t.length < 3) { setInterimText(""); return; }
@@ -1265,41 +1321,50 @@ export function AgentHabitat() {
 										</div>
 									)}
 
-									{/* === FRESHNESS GLOBAL === */}
-									<div className="text-[10px] pt-2 border-t border-[#1a2a42]">
-										<div className="flex items-center justify-between mb-1">
-											<span className="text-[#4a5f7f]">v{liveManifest.version} · {liveManifest.flows_available} flows</span>
+									{/* === NARRATIVA VIVA DEL ORGANISMO === */}
+									{liveManifest.narrative && (
+										<div className="rounded-lg p-2.5 border border-[#49c2ff22] mt-1" style={{ background: "linear-gradient(135deg, #49c2ff06, #03070d)" }}>
+											<div className="text-[10px] text-[#8ca0c6] font-medium mb-1.5">
+												{liveManifest.narrative.summary}
+											</div>
+											<div className="space-y-1">
+												{[
+													{ key: "billing", icon: "●", color: "#4caf50" },
+													{ key: "guardian", icon: "●", color: liveManifest.narrative.guardian_health === "verde" ? "#3af08f" : liveManifest.narrative.guardian_health === "amarillo" ? "#ffcc00" : "#ff9800" },
+													{ key: "pipeline", icon: "●", color: "#ffcc00" },
+													{ key: "ces", icon: "●", color: "#ef5350" },
+													{ key: "leads", icon: "●", color: "#26a69a" },
+													{ key: "tourism", icon: "●", color: "#ff7043" },
+													{ key: "logs", icon: "●", color: "#78909c" },
+												].map(({ key, icon, color }) => {
+													const text = liveManifest.narrative[key];
+													const voice = liveManifest.narrative[`${key}_voice`];
+													if (!text) return null;
+													return (
+														<div key={key} className="text-[9px]">
+															<span style={{ color }}>{icon}</span>
+															<span className="text-[#8ca0c6] ml-1">{text}</span>
+															{voice && <span className="text-[#4a5f7f] ml-1 italic">— {voice}</span>}
+														</div>
+													);
+												})}
+											</div>
+											{liveManifest.narrative.summary_voice && (
+												<div className="text-[9px] text-[#49c2ff] mt-1.5 italic">
+													"{liveManifest.narrative.summary_voice}"
+												</div>
+											)}
+										</div>
+									)}
+
+									{/* === FRESHNESS === */}
+									<div className="text-[10px] pt-1.5 mt-1 border-t border-[#1a2a42]">
+										<div className="flex items-center justify-between">
+											<span className="text-[8px] text-[#3a4f6f]">v{liveManifest.version}</span>
 											{liveManifest.generated_at && (
 												<span className="text-[8px] text-[#3af08f]">{timeAgo(liveManifest.generated_at)}</span>
 											)}
 										</div>
-										<div className="flex flex-wrap gap-1">
-											{[
-												["billing", liveManifest.billing],
-												["guardian", liveManifest.guardian],
-												["pipeline", liveManifest.pipeline],
-												["CES", liveManifest.ces],
-												["leads", liveManifest.leads],
-												["turismo", liveManifest.tourism],
-												["tiendas", liveManifest.stores_depth],
-												["healing", liveManifest.self_healing],
-												["logs", liveManifest.log_stats],
-											].map(([name, data]: [string, any]) => {
-												const st = data?.status || data?._fetched_at ? "ok" : "missing";
-												const isOk = st === "operativo" || st === "active" || st === "ok";
-												return (
-													<span key={name as string} className="text-[7px] px-1 py-0.5 rounded" style={{
-														background: isOk ? "#3af08f12" : "#ff444412",
-														color: isOk ? "#3af08f" : "#ff4444",
-													}}>
-														{name as string}
-													</span>
-												);
-											})}
-										</div>
-										<p className="text-[8px] text-[#3a4f6f] mt-1">
-											{deviceRef.current.slice(0, 12)} · {sessionRef.current.slice(0, 8)}
-										</p>
 									</div>
 								</div>
 							)}
