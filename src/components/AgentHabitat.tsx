@@ -998,73 +998,163 @@ export function AgentHabitat() {
 					)}
 				</div>
 
-				{/* Mobile sidebar — replaces events when open */}
+				{/* Mobile sidebar — same content as desktop, scrollable */}
 				{showSidebar && isMobile && (
-					<div className="rounded-lg border border-[#1a2a42] bg-[#0a1628] p-3 overflow-y-auto" style={{ maxHeight: "65vh" }}>
+					<aside className="rounded-lg border border-[#1a2a42] bg-[#0a1628] p-3 overflow-y-auto" style={{ maxHeight: "65vh" }}>
 						<div className="flex gap-1 mb-3">
 							{(["flows", "manifest", "stats"] as SideTab[]).map((t) => (
 								<button key={t} onClick={() => setSideTab(t)}
 									className={`text-[10px] px-2 py-1 rounded-full border cursor-pointer transition-colors ${sideTab === t ? "bg-[#49c2ff22] border-[#49c2ff44] text-[#49c2ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f]"}`}>
-									{t === "flows" ? `Flujos` : t === "manifest" ? "Manifest" : "Stats"}
+									{t === "flows" ? `Flujos (${flows.length})` : t === "manifest" ? "Manifest" : "Stats"}
 								</button>
 							))}
 							<button onClick={() => setShowSidebar(false)} className="ml-auto text-[10px] text-[#4a5f7f] bg-transparent border-none cursor-pointer">&#x2715;</button>
 						</div>
-						{/* Manifest mobile */}
-						{sideTab === "manifest" && liveManifest && (
-							<div className="grid gap-2">
-								<div className="text-[10px] text-[#49c2ff] font-semibold">Servicios ({liveManifest.services_alive}/{liveManifest.services_total})</div>
-								<div className="grid grid-cols-2 gap-1">
-									{Object.entries(liveManifest.services || {}).map(([k, v]: [string, any]) => (
-										<div key={k} className="flex items-center justify-between text-[10px]">
-											<span className="text-[#8ca0c6]">{k}</span>
-											<span style={{ color: SVC_COLOR[v.status] || "#4a5f7f" }}>{v.status === "alive" ? "\u25CF" : "\u25CB"}</span>
+						{/* Flows — same as desktop */}
+						{sideTab === "flows" && (
+							<div className="grid gap-3">
+								{categories.map((cat: any) => {
+									const catFlows = flowsByCategory[cat.id] || [];
+									if (catFlows.length === 0) return null;
+									return (
+										<div key={cat.id}>
+											<h4 className="text-[10px] font-semibold mb-1.5" style={{ color: cat.color || "#7f95bb" }}>
+												{cat.icon} {cat.label} ({catFlows.length})
+											</h4>
+											<div className="grid gap-1">
+												{catFlows.map((f: any) => (
+													<button key={f.id} onClick={() => { startFlow(f.id); setShowSidebar(false); }}
+														className="text-left rounded px-2 py-1.5 border border-[#1a2a42] bg-[#03070d] cursor-pointer">
+														<div className="flex items-center gap-1.5">
+															<span className="text-xs">{f.icon}</span>
+															<span className="text-[11px] text-[#dbe7ff]">{f.label}</span>
+															<span className={`text-[9px] ml-auto px-1 rounded ${f.readiness === "live" ? "text-[#3af08f] bg-[#3af08f11]" : f.readiness === "partial" ? "text-[#ffcc00] bg-[#ffcc0011]" : "text-[#4a5f7f] bg-[#4a5f7f11]"}`}>{f.readiness}</span>
+														</div>
+														<p className="text-[9px] text-[#4a5f7f] mt-0.5 line-clamp-1">{f.desc}</p>
+													</button>
+												))}
+											</div>
 										</div>
-									))}
-								</div>
-								{stores.filter(s => (s.active || 0) > 0).length > 0 && (
-									<div>
-										<div className="text-[10px] text-[#ff9800] font-semibold mt-1">Tiendas</div>
-										{stores.filter(s => (s.active || 0) > 0).map((s, i) => (
-											<div key={i} className="flex justify-between text-[10px] text-[#8ca0c6]">
-												<span>{s.store_id}</span>
-												<span>{(s.active || 0).toLocaleString()} · {s.grade}</span>
+									);
+								})}
+							</div>
+						)}
+						{/* Manifest — same as desktop */}
+						{sideTab === "manifest" && liveManifest && (
+							<div className="grid gap-3">
+								<div>
+									<h4 className="text-[10px] text-[#49c2ff] font-semibold mb-1.5">Servicios ({liveManifest.services_alive}/{liveManifest.services_total} alive)</h4>
+									<div className="grid gap-1">
+										{Object.entries(liveManifest.services || {}).map(([k, v]: [string, any]) => (
+											<div key={k} className="flex items-center justify-between text-xs">
+												<span className="text-[#8ca0c6]">{k}</span>
+												<span style={{ color: SVC_COLOR[v.status] || "#4a5f7f" }}>{v.status}</span>
 											</div>
 										))}
 									</div>
+								</div>
+								<div>
+									<h4 className="text-[10px] text-[#ff9800] font-semibold mb-1.5 tracking-wider">TIENDAS ({stores.filter(s => (s.active || 0) > 0).length}/{stores.length})</h4>
+									<div className="grid gap-0.5">
+										{stores.filter(s => (s.active || 0) > 0).map((s, i) => {
+											const grade = s.grade || "?";
+											const gradeColor = grade.startsWith("A") ? "#3af08f" : grade === "OK" ? "#ffcc00" : "#4a5f7f";
+											return (
+												<div key={i} className="flex items-center justify-between text-xs">
+													<div className="flex items-center gap-1.5">
+														<span className="w-1.5 h-1.5 rounded-full bg-[#3af08f]" />
+														<span className="text-[#8ca0c6]">{s.store_id || "?"}</span>
+													</div>
+													<div className="flex items-center gap-2">
+														<span className="text-[#4a5f7f] text-[10px]">{(s.active || 0).toLocaleString()}</span>
+														<span className="text-[10px] px-1 rounded font-semibold" style={{ color: gradeColor, backgroundColor: gradeColor + "18" }}>{grade}</span>
+													</div>
+												</div>
+											);
+										})}
+									</div>
+									<div className="flex items-center justify-between text-[10px] pt-1.5 mt-1.5 border-t border-[#1a2a42]">
+										<span className="text-[#4a5f7f] font-semibold">TOTAL PRODUCTOS</span>
+										<span className="text-[#ff9800] font-semibold">{stores.reduce((sum, s) => sum + (s.active || 0), 0).toLocaleString()}</span>
+									</div>
+								</div>
+								{liveManifest?.ecosystem && (
+									<div>
+										<h4 className="text-[10px] text-[#29b6f6] font-semibold mb-1.5 tracking-wider">ECOSISTEMA</h4>
+										<div className="grid grid-cols-2 gap-1">
+											{[
+												{ label: "Pipeline", value: liveManifest.ecosystem.pipeline_version || "?", color: "#ffcc00" },
+												{ label: "PG Tables", value: liveManifest.ecosystem.pg_tables || 0, color: "#29b6f6" },
+												{ label: "PG Rows", value: (liveManifest.ecosystem.pg_rows || 0).toLocaleString(), color: "#29b6f6" },
+												{ label: "ChromaDB", value: `${(liveManifest.ecosystem.chromadb_docs || 0).toLocaleString()} docs`, color: "#a78bfa" },
+												{ label: "Jobs", value: liveManifest.ecosystem.pipeline_jobs || 0, color: "#ffcc00" },
+												{ label: "Industrias", value: liveManifest.ecosystem.industries || 0, color: "#3af08f" },
+												{ label: "CES", value: liveManifest.ces?.decisions_total ? `${liveManifest.ces.allowed}/${liveManifest.ces.blocked}/${liveManifest.ces.overrides}` : `${liveManifest.ecosystem?.ces_principles || 15} princ`, color: "#ef5350" },
+												{ label: "Radar", value: `${liveManifest.ecosystem.radar_disciplines || 0} disc`, color: "#29b6f6" },
+												{ label: "Git", value: `${liveManifest.ecosystem.git_commits || 0} commits`, color: "#4a5f7f" },
+												{ label: "Events", value: (liveManifest.ecosystem.agent_events || 0).toLocaleString(), color: "#49c2ff" },
+											].map((item, i) => (
+												<div key={i} className="rounded bg-[#03070d88] px-1.5 py-1">
+													<div className="text-[9px] text-[#4a5f7f]">{item.label}</div>
+													<div className="text-[11px] font-semibold" style={{ color: item.color }}>{item.value}</div>
+												</div>
+											))}
+										</div>
+									</div>
 								)}
-								{liveManifest.ces && (
-									<div className="flex justify-between text-[10px] mt-1">
-										<span className="text-[#ef5350] font-semibold">CES</span>
-										<span className="text-[#4a5f7f]">{liveManifest.ces.allowed}\u2705 {liveManifest.ces.blocked}\uD83D\uDED1 {liveManifest.ces.overrides}\u26A0\uFE0F</span>
+								{liveManifest?.whatsapp && (
+									<div className="rounded-lg p-2 border border-[#25D36622]" style={{ background: "#25D36608" }}>
+										<div className="flex items-center gap-1.5">
+											<span className="text-xs font-semibold text-[#25D366]">WhatsApp</span>
+											<span className="text-[9px] px-1 rounded bg-[#25D36615] text-[#25D366]">{liveManifest.whatsapp.status}</span>
+										</div>
+										<div className="text-[10px] text-[#4a5f7f] mt-0.5">{liveManifest.whatsapp.number} · {liveManifest.whatsapp.multi_industry ? "Multi-industria" : "Mono"}</div>
+									</div>
+								)}
+								{liveManifest?.ces && (
+									<div className="rounded-lg p-2 border border-[#ef535022]" style={{ background: "#ef535008" }}>
+										<div className="flex items-center justify-between">
+											<div className="flex items-center gap-1.5">
+												<span className="text-xs font-semibold text-[#ef5350]">CES</span>
+												<span className="text-[9px] px-1 rounded bg-[#ef535015] text-[#ef5350]">{liveManifest.ces.status}</span>
+											</div>
+											<span className="text-[10px] text-[#4a5f7f]">{liveManifest.ces.principles} principios</span>
+										</div>
+										<div className="grid grid-cols-3 gap-1 mt-1.5">
+											<div className="text-center"><div className="text-[11px] font-semibold text-[#3af08f]">{liveManifest.ces.allowed}</div><div className="text-[8px] text-[#4a5f7f]">allowed</div></div>
+											<div className="text-center"><div className="text-[11px] font-semibold text-[#ef5350]">{liveManifest.ces.blocked}</div><div className="text-[8px] text-[#4a5f7f]">blocked</div></div>
+											<div className="text-center"><div className="text-[11px] font-semibold text-[#ff9800]">{liveManifest.ces.overrides}</div><div className="text-[8px] text-[#4a5f7f]">override</div></div>
+										</div>
+										<div className="text-[9px] text-[#4a5f7f] mt-1">{liveManifest.ces.decisions_total} decisiones totales</div>
 									</div>
 								)}
 							</div>
 						)}
-						{/* Stats mobile */}
+						{/* Stats — same as desktop */}
 						{sideTab === "stats" && stats && (
-							<div className="grid grid-cols-2 gap-2">
-								{[["Devices", stats.devices_total], ["Sessions", stats.sessions_total], ["Events", stats.events_total], ["Flows", stats.flows_completed]].map(([l, v]) => (
-									<div key={l as string} className="rounded border border-[#1a2a42] bg-[#03070d] p-1.5 text-center">
-										<p className="text-sm font-bold text-[#dbe7ff]">{(v as number)?.toLocaleString()}</p>
-										<p className="text-[8px] text-[#4a5f7f]">{l as string}</p>
+							<div className="grid gap-3">
+								<div className="grid grid-cols-2 gap-2">
+									{[["Devices", stats.devices_total], ["Sessions", stats.sessions_total], ["Events", stats.events_total], ["Flows done", stats.flows_completed]].map(([label, val]) => (
+										<div key={label as string} className="rounded border border-[#1a2a42] bg-[#03070d] p-2 text-center">
+											<p className="text-lg font-bold text-[#dbe7ff]">{(val as number)?.toLocaleString()}</p>
+											<p className="text-[9px] text-[#4a5f7f]">{label as string}</p>
+										</div>
+									))}
+								</div>
+								<div>
+									<h4 className="text-[10px] text-[#49c2ff] font-semibold mb-1.5">Events by source</h4>
+									<div className="grid gap-1">
+										{Object.entries(stats.events_by_source || {}).map(([src, count]: [string, any]) => (
+											<div key={src} className="flex items-center justify-between text-xs">
+												<span style={{ color: SOURCE_COLORS[src] || "#7f95bb" }}>{src}</span>
+												<span className="text-[#8ca0c6]">{count}</span>
+											</div>
+										))}
 									</div>
-								))}
+								</div>
 							</div>
 						)}
-						{/* Flows mobile */}
-						{sideTab === "flows" && (
-							<div className="grid gap-1">
-								{flows.slice(0, 10).map((f: any) => (
-									<button key={f.id} onClick={() => { startFlow(f.id); setShowSidebar(false); }}
-										className="text-left rounded px-2 py-1 border border-[#1a2a42] bg-[#03070d] text-[10px] cursor-pointer">
-										<span>{f.icon} {f.label}</span>
-										<span className={`ml-1 px-1 rounded ${f.readiness === "live" ? "text-[#3af08f]" : "text-[#4a5f7f]"}`}>{f.readiness}</span>
-									</button>
-								))}
-							</div>
-						)}
-					</div>
+					</aside>
 				)}
 			</div>
 			{showDebug && (
