@@ -620,7 +620,7 @@ export function AgentHabitat() {
 										</button>
 									)}
 								</div>
-								<button onClick={() => setShowSidebar((v) => !v)} className="mt-1 text-[10px] text-[#49c2ff] hover:text-[#9be2ff] transition-colors cursor-pointer bg-transparent border-none">
+								<button onClick={() => { setShowSidebar((v) => !v); if (isMobile) setSideTab("manifest"); }} className="mt-1 text-[10px] text-[#49c2ff] hover:text-[#9be2ff] transition-colors cursor-pointer bg-transparent border-none">
 									{showSidebar ? "Ocultar" : "Panel"}
 								</button>
 							</>
@@ -998,9 +998,9 @@ export function AgentHabitat() {
 					)}
 				</div>
 
-				{/* Mobile sidebar — inline below grid */}
+				{/* Mobile sidebar — below grid, scrollable */}
 				{showSidebar && isMobile && (
-					<div className="mt-3 rounded-lg border border-[#1a2a42] bg-[#0a1628] p-3 overflow-y-auto max-h-[50vh]">
+					<div className="mt-3 mb-16 rounded-lg border border-[#1a2a42] bg-[#0a1628] p-3 overflow-y-auto" style={{ maxHeight: "50vh" }}>
 						<div className="flex gap-1 mb-3">
 							{(["flows", "manifest", "stats"] as SideTab[]).map((t) => (
 								<button key={t} onClick={() => setSideTab(t)}
