@@ -210,13 +210,13 @@ export function AgentHabitat() {
 				audio.onended = () => {
 					isPlayingRef.current = false; setIsSpeaking(false); URL.revokeObjectURL(url);
 					if (inputModeRef.current === "voice" && wasListening) {
-						setTimeout(() => { if (!isPlayingRef.current) { try { recognitionRef.current?.start(); setIsListening(true); } catch {} } }, 800);
+						setTimeout(() => { if (!isPlayingRef.current) { try { recognitionRef.current?.start(); setIsListening(true); } catch {} } }, 700);
 					}
 				};
 				audio.onerror = () => {
 					isPlayingRef.current = false; setIsSpeaking(false);
 					if (inputModeRef.current === "voice" && wasListening) {
-						setTimeout(() => { if (!isPlayingRef.current) { try { recognitionRef.current?.start(); setIsListening(true); } catch {} } }, 800);
+						setTimeout(() => { if (!isPlayingRef.current) { try { recognitionRef.current?.start(); setIsListening(true); } catch {} } }, 700);
 					}
 				};
 				audio.src = url;
@@ -309,7 +309,7 @@ export function AgentHabitat() {
 				setInterimText("");
 				// Stop recognition to clear results array, onend will restart
 				try { recognition.stop(); } catch {}
-			}, 2500);
+			}, 1800);
 		};
 		recognition.onend = () => {
 			// NEVER auto-restart while TTS is playing
@@ -320,7 +320,7 @@ export function AgentHabitat() {
 					if (inputModeRef.current === "voice" && !isPlayingRef.current) {
 						try { recognition.start(); } catch {}
 					}
-				}, 1000);
+				}, 500);
 			} else { setIsListening(false); }
 		};
 		recognition.onerror = (e: any) => {
@@ -628,8 +628,8 @@ export function AgentHabitat() {
 						{!isMobile && <p className="text-[9px] text-[#4a5f7f] mt-2">{WS_URLS[wsUrlIdx]?.replace("wss://", "").replace("ws://", "")}</p>}
 					</section>
 
-					{/* ── Events + Input + Flow player ── */}
-					<section className={`flex flex-col ${isMobile ? "max-h-[65vh]" : "max-h-[80vh]"}`}>
+					{/* ── Events + Input + Flow player (hidden on mobile when panel open) ── */}
+					<section className={`flex flex-col ${isMobile ? "max-h-[65vh]" : "max-h-[80vh]"} ${isMobile && showSidebar ? "hidden" : ""}`}>
 						{!isMobile && <h2 className="text-xs tracking-[0.18em] text-[#7f95bb] mb-3">EVENTOS</h2>}
 
 						{/* Voice / Text Input */}
@@ -998,9 +998,9 @@ export function AgentHabitat() {
 					)}
 				</div>
 
-				{/* Mobile sidebar — below grid, scrollable */}
+				{/* Mobile sidebar — replaces events when open */}
 				{showSidebar && isMobile && (
-					<div className="mt-3 mb-16 rounded-lg border border-[#1a2a42] bg-[#0a1628] p-3 overflow-y-auto" style={{ maxHeight: "50vh" }}>
+					<div className="rounded-lg border border-[#1a2a42] bg-[#0a1628] p-3 overflow-y-auto" style={{ maxHeight: "65vh" }}>
 						<div className="flex gap-1 mb-3">
 							{(["flows", "manifest", "stats"] as SideTab[]).map((t) => (
 								<button key={t} onClick={() => setSideTab(t)}
