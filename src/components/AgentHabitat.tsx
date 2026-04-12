@@ -954,6 +954,108 @@ export function AgentHabitat() {
 										</div>
 									)}
 
+									{/* === Billing === */}
+									{liveManifest?.billing && (
+										<div className="rounded-lg p-2 border border-[#4caf5022]" style={{ background: "rgba(76,175,80,0.03)" }}>
+											<div className="flex items-center gap-1.5">
+												<span className="text-xs font-semibold text-[#4caf50]">BILLING</span>
+												<span className="text-[9px] px-1 rounded bg-[#4caf5015] text-[#4caf50]">{liveManifest.billing.medicion_solo ? "medicion" : "activo"}</span>
+											</div>
+											<div className="grid grid-cols-3 gap-1 mt-1.5">
+												<div className="text-center"><div className="text-[11px] font-semibold text-[#4caf50]">{liveManifest.billing.total_ventas || 0}</div><div className="text-[8px] text-[#4a5f7f]">ventas</div></div>
+												<div className="text-center"><div className="text-[11px] font-semibold text-[#4caf50]">${Math.round((liveManifest.billing.total_monto || 0) / 1000)}K</div><div className="text-[8px] text-[#4a5f7f]">revenue</div></div>
+												<div className="text-center"><div className="text-[11px] font-semibold text-[#ff9800]">${Math.round((liveManifest.billing.total_comision || 0) / 1000)}K</div><div className="text-[8px] text-[#4a5f7f]">comision</div></div>
+											</div>
+										</div>
+									)}
+									{/* === Guardian === */}
+									{liveManifest?.guardian && (
+										<div className="rounded-lg p-2 border border-[#ff980022]" style={{ background: "rgba(255,152,0,0.03)" }}>
+											<div className="flex items-center gap-1.5">
+												<span className="text-xs font-semibold text-[#ff9800]">GUARDIAN</span>
+												<span className="text-[9px] px-1 rounded bg-[#ff980015] text-[#ff9800]">{liveManifest.guardian.health || "?"}</span>
+											</div>
+											<div className="grid grid-cols-3 gap-1 mt-1.5">
+												<div className="text-center"><div className="text-[11px] font-semibold text-[#ff9800]">{liveManifest.guardian.stores_total || 0}</div><div className="text-[8px] text-[#4a5f7f]">tiendas</div></div>
+												<div className="text-center"><div className="text-[11px] font-semibold text-[#3af08f]">{(liveManifest.guardian.products_active || 0).toLocaleString()}</div><div className="text-[8px] text-[#4a5f7f]">activos</div></div>
+												<div className="text-center"><div className="text-[11px] font-semibold text-[#49c2ff]">{(liveManifest.guardian.products_total || 0).toLocaleString()}</div><div className="text-[8px] text-[#4a5f7f]">total</div></div>
+											</div>
+										</div>
+									)}
+									{/* === Pipeline === */}
+									{liveManifest?.pipeline && (
+										<div className="rounded-lg p-2 border border-[#ffcc0022]" style={{ background: "rgba(255,204,0,0.03)" }}>
+											<div className="flex items-center gap-1.5">
+												<span className="text-xs font-semibold text-[#ffcc00]">PIPELINE</span>
+												<span className="text-[9px] px-1 rounded bg-[#ffcc0015] text-[#ffcc00]">{liveManifest.pipeline.version || "?"}</span>
+											</div>
+											<div className="text-[10px] text-[#8ca0c6] mt-1">{liveManifest.pipeline.total_ejecuciones || 0} ejecuciones</div>
+											{liveManifest.pipeline.last_execution && (
+												<div className="text-[9px] text-[#4a5f7f] mt-0.5">Ultima: {liveManifest.pipeline.last_execution.store} → {liveManifest.pipeline.last_execution.status}</div>
+											)}
+										</div>
+									)}
+									{/* === Leads === */}
+									{liveManifest?.leads && (
+										<div className="rounded-lg p-2 border border-[#26a69a22]" style={{ background: "rgba(38,166,154,0.03)" }}>
+											<div className="flex items-center gap-1.5">
+												<span className="text-xs font-semibold text-[#26a69a]">LEADS</span>
+												<span className="text-[9px] px-1 rounded bg-[#26a69a15] text-[#26a69a]">{liveManifest.leads.total || 0} capturados</span>
+											</div>
+										</div>
+									)}
+									{/* === Turismo === */}
+									{liveManifest?.tourism && (
+										<div className="rounded-lg p-2 border border-[#ff704322]" style={{ background: "rgba(255,112,67,0.03)" }}>
+											<div className="flex items-center gap-1.5">
+												<span className="text-xs font-semibold text-[#ff7043]">TURISMO</span>
+												<span className="text-[9px] px-1 rounded bg-[#ff704315] text-[#ff7043]">{liveManifest.tourism.active_providers || "?"} pisos</span>
+											</div>
+											<div className="grid grid-cols-3 gap-1 mt-1.5">
+												<div className="text-center"><div className="text-[11px] font-semibold text-[#ff7043]">{liveManifest.tourism.bookings || 0}</div><div className="text-[8px] text-[#4a5f7f]">bookings</div></div>
+												<div className="text-center"><div className="text-[11px] font-semibold text-[#26a69a]">{liveManifest.tourism.leads || 0}</div><div className="text-[8px] text-[#4a5f7f]">leads</div></div>
+												<div className="text-center"><div className="text-[11px] font-semibold text-[#8ca0c6]">{liveManifest.tourism.events || 0}</div><div className="text-[8px] text-[#4a5f7f]">events</div></div>
+											</div>
+										</div>
+									)}
+									{/* === Self-Healing === */}
+									{liveManifest?.self_healing && (
+										<div className="rounded-lg p-2 border border-[#ab47bc22]" style={{ background: "rgba(171,71,188,0.03)" }}>
+											<div className="flex items-center gap-1.5">
+												<span className="text-xs font-semibold text-[#ab47bc]">SELF-HEALING</span>
+												<span className="text-[9px] px-1 rounded bg-[#ab47bc15] text-[#ab47bc]">{liveManifest.self_healing.gaps_total || 0} gaps</span>
+											</div>
+										</div>
+									)}
+									{/* === Radar === */}
+									{liveManifest?.ecosystem && (
+										<div className="rounded-lg p-2 border border-[#f9731622]" style={{ background: "rgba(249,115,22,0.03)" }}>
+											<div className="flex items-center gap-1.5">
+												<span className="text-xs font-semibold text-[#f97316]">RADAR</span>
+												<span className="text-[9px] px-1 rounded bg-[#f9731615] text-[#f97316]">{liveManifest.ecosystem.radar_disciplines || 0} disciplinas</span>
+											</div>
+										</div>
+									)}
+									{/* === Logs === */}
+									{liveManifest?.log_stats && (
+										<div className="rounded-lg p-2 border border-[#78909c22]" style={{ background: "rgba(120,144,156,0.03)" }}>
+											<div className="flex items-center gap-1.5">
+												<span className="text-xs font-semibold text-[#78909c]">LOGS</span>
+												<span className="text-[9px] px-1 rounded bg-[#78909c15] text-[#78909c]">{liveManifest.log_stats.active_logs || 0}/{liveManifest.log_stats.total_logs || 0} activos</span>
+												<span className="text-[9px] text-[#4a5f7f]">{(liveManifest.log_stats.total_lines || 0).toLocaleString()} lineas</span>
+											</div>
+										</div>
+									)}
+									{/* === Narrativas === */}
+									{liveManifest?.narrative && (
+										<div className="grid gap-1.5 pt-2 border-t border-[#1a2a42]">
+											{Object.entries(liveManifest.narrative).filter(([k]) => !k.endsWith("_voice")).map(([k, v]: [string, any]) => (
+												v && typeof v === "string" ? (
+													<p key={k} className="text-[10px] text-[#8ca0c6] pl-2 border-l-2 border-[#1a2a4266]">{v}</p>
+												) : null
+											))}
+										</div>
+									)}
 									<div className="text-[10px] text-[#4a5f7f] pt-2 border-t border-[#1a2a42]">
 										<p>v{liveManifest.version} · {liveManifest.flows_available} flows</p>
 										<p>device: {deviceRef.current.slice(0, 16)}</p>
