@@ -756,29 +756,31 @@ export function AgentHabitat() {
 				<div className="grid gap-6" style={{ gridTemplateColumns: isMobile ? "1fr" : showSidebar ? "180px 1fr 300px" : "180px 1fr" }}>
 
 					{/* ── Flame column ── */}
-					<section className={`flex flex-col items-center ${isMobile ? "pt-2 flex-row gap-3 justify-center" : "pt-8"}`}>
-						<div role="img" aria-label={`ODI estado: ${phase === "live" ? "activo" : phase}`} className={isMobile ? "w-16 h-16 rounded-full" : "w-28 h-28 rounded-full"} style={{
+					<section className={`flex flex-col items-center ${isMobile ? "py-2" : "pt-8"}`}>
+						<div role="img" aria-label={`ODI estado: ${phase === "live" ? "activo" : phase}`} className={isMobile ? "w-12 h-12 rounded-full" : "w-28 h-28 rounded-full"} style={{
 							background: isSpeaking ? "radial-gradient(circle at 50% 35%, #ec4899 0%, #be185d 40%, #6f6dff 70%, transparent 100%)" : flameGradient[phase],
 							boxShadow: isSpeaking ? "0 0 40px #ec489988, inset 0 0 30px #ec489944" : flameShadow[phase],
 							animation: phase === "live" ? "breathe 4s ease-in-out infinite" : "none",
 							transition: "box-shadow 0.6s, background 0.6s",
 						}} />
-						<p className="text-xs text-[#7f95bb] mt-3 text-center">
-							{phase === "live" && heartbeats > 0 && `${heartbeats} latidos`}
-						</p>
+						{!isMobile && (
+							<p className="text-xs text-[#7f95bb] mt-3 text-center">
+								{phase === "live" && heartbeats > 0 && `${heartbeats} latidos`}
+							</p>
+						)}
 						{phase === "live" && (
 							<>
-								<div className="flex gap-1.5 mt-3 flex-wrap justify-center" role="group" aria-label="Modo de entrada">
-									<button aria-label="Activar modo voz" aria-pressed={inputMode === "voice"} onClick={() => { setInputMode("voice"); if (!isListening) startContinuousListening(); }} className={`text-[10px] px-2.5 py-1.5 rounded-lg border cursor-pointer transition-all ${inputMode === "voice" ? "bg-[#49c2ff15] border-[#49c2ff44] text-[#dbe7ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f] hover:text-[#7f95bb]"}`}>
+								<div className={`flex gap-1.5 flex-wrap justify-center ${isMobile ? "mt-1" : "mt-3"}`} role="group" aria-label="Modo de entrada">
+									<button aria-label="Activar modo voz" aria-pressed={inputMode === "voice"} onClick={() => { setInputMode("voice"); if (!isListening) startContinuousListening(); }} className={`${isMobile ? "text-xs px-3 py-2" : "text-[10px] px-2.5 py-1.5"} rounded-lg border cursor-pointer transition-all ${inputMode === "voice" ? "bg-[#49c2ff15] border-[#49c2ff44] text-[#dbe7ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f] hover:text-[#7f95bb]"}`}>
 										🎙 Voz
 									</button>
-									<button aria-label="Activar modo texto" aria-pressed={inputMode === "text"} onClick={() => { stopContinuousListening(); setInputMode("text"); }} className={`text-[10px] px-2.5 py-1.5 rounded-lg border cursor-pointer transition-all ${inputMode === "text" ? "bg-[#49c2ff15] border-[#49c2ff44] text-[#dbe7ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f] hover:text-[#7f95bb]"}`}>
+									<button aria-label="Activar modo texto" aria-pressed={inputMode === "text"} onClick={() => { stopContinuousListening(); setInputMode("text"); }} className={`${isMobile ? "text-xs px-3 py-2" : "text-[10px] px-2.5 py-1.5"} rounded-lg border cursor-pointer transition-all ${inputMode === "text" ? "bg-[#49c2ff15] border-[#49c2ff44] text-[#dbe7ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f] hover:text-[#7f95bb]"}`}>
 										⌨ Texto
 									</button>
-									<button aria-label="Modo señas — texto sin audio, iconos grandes" aria-pressed={inputMode === "signs"} onClick={() => { stopContinuousListening(); setInputMode("signs"); updateA11y({ textSize: "large", contrast: "high" }); }} className={`text-[10px] px-2.5 py-1.5 rounded-lg border cursor-pointer transition-all ${inputMode === "signs" ? "bg-[#49c2ff15] border-[#49c2ff44] text-[#dbe7ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f] hover:text-[#7f95bb]"}`}>
+									<button aria-label="Modo señas — texto sin audio, iconos grandes" aria-pressed={inputMode === "signs"} onClick={() => { stopContinuousListening(); setInputMode("signs"); updateA11y({ textSize: "large", contrast: "high" }); }} className={`${isMobile ? "text-xs px-3 py-2" : "text-[10px] px-2.5 py-1.5"} rounded-lg border cursor-pointer transition-all ${inputMode === "signs" ? "bg-[#49c2ff15] border-[#49c2ff44] text-[#dbe7ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f] hover:text-[#7f95bb]"}`}>
 										🤟 Señas
 									</button>
-									<button aria-label="Configurar accesibilidad" onClick={() => setShowAdaptarme(v => !v)} className={`text-[10px] px-2 py-1.5 rounded-lg border cursor-pointer transition-all ${showAdaptarme ? "bg-[#49c2ff15] border-[#49c2ff44] text-[#dbe7ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f] hover:text-[#7f95bb]"}`}>
+									<button aria-label="Configurar accesibilidad" onClick={() => setShowAdaptarme(v => !v)} className={`${isMobile ? "text-xs px-3 py-2" : "text-[10px] px-2 py-1.5"} rounded-lg border cursor-pointer transition-all ${showAdaptarme ? "bg-[#49c2ff15] border-[#49c2ff44] text-[#dbe7ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f] hover:text-[#7f95bb]"}`}>
 										♿ Adaptarme
 									</button>
 								</div>
@@ -824,12 +826,12 @@ export function AgentHabitat() {
 								</button>
 							</>
 						)}
-						<p className="text-[9px] text-[#4a5f7f] mt-2">{WS_URLS[wsUrlIdx]?.replace("wss://", "").replace("ws://", "")}</p>
+						{!isMobile && <p className="text-[9px] text-[#4a5f7f] mt-2">{WS_URLS[wsUrlIdx]?.replace("wss://", "").replace("ws://", "")}</p>}
 					</section>
 
 					{/* ── Events + Input + Flow player ── */}
-					<section className={`flex flex-col ${isMobile ? "min-h-0 flex-1" : "max-h-[80vh]"}`}>
-						<h2 className="text-xs tracking-[0.18em] text-[#7f95bb] mb-3">EVENTOS</h2>
+					<section className={`flex flex-col ${isMobile ? "max-h-[60vh]" : "max-h-[80vh]"}`}>
+						{!isMobile && <h2 className="text-xs tracking-[0.18em] text-[#7f95bb] mb-3">EVENTOS</h2>}
 
 						{/* Voice / Text Input */}
 						{phase === "live" && (
