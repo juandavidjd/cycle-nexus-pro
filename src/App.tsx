@@ -18,6 +18,7 @@ import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import Manager from "./pages/Manager";
 import AgentPage from "./pages/AgentHabitat";
+import LiveODIPage from "./pages/LiveODIPage";
 
 // ─── Habitat (liveodi.com) ───
 import HabitatLayout from "./components/habitat/HabitatLayout";
@@ -72,7 +73,8 @@ const App = () => (
           <BrowserRouter>
             <Routes>
               <Route path="/manager" element={<Manager />} />
-              <Route path="/agent" element={<AgentPage />} />
+              <Route path="/agent" element={<LiveODIPage />} />
+              <Route path="/panel" element={<AgentPage />} />
               <Route path="*" element={<AppContent />} />
             </Routes>
           </BrowserRouter>
