@@ -721,7 +721,7 @@ export function AgentHabitat() {
 		offline: "radial-gradient(circle at 50% 35%, #ff4444 0%, #cc0000 50%, transparent 100%)",
 	};
 	const flameShadow: Record<Phase, string> = { idle: "0 0 20px #44444488", connecting: "0 0 30px #ffcc0088", registering: "0 0 30px #ffcc0088", live: "0 0 38px #4ab8ffaa, inset 0 0 35px #b8d8ff70", offline: "0 0 30px #ff444488" };
-	const statusLabel: Record<Phase, string> = { idle: "Inactivo", connecting: "Conectando...", registering: "Registrando...", live: "Habitat vivo", offline: "Modo offline — reconectando..." };
+	const statusLabel: Record<Phase, string> = { idle: "Esperando...", connecting: "Buscando al organismo...", registering: "Despertando...", live: "Habitat vivo", offline: "Volviendo..." };
 	const statusDot: Record<Phase, string> = { idle: "bg-[#444]", connecting: "bg-[#ffcc00] animate-pulse", registering: "bg-[#ffcc00] animate-pulse", live: "bg-[#3af08f] shadow-[0_0_12px_#3af08fcc] animate-pulse", offline: "bg-[#ff4444] animate-pulse" };
 
 	// Group flows by category
@@ -820,7 +820,7 @@ export function AgentHabitat() {
 									</div>
 								)}
 								<button onClick={() => setShowSidebar((v) => !v)} className="mt-2 text-[10px] text-[#49c2ff] hover:text-[#9be2ff] transition-colors cursor-pointer bg-transparent border-none">
-									{showSidebar ? "Ocultar panel" : "Panel"}
+									{showSidebar ? "Ocultar" : "Ver organismo"}
 								</button>
 							</>
 						)}
@@ -954,8 +954,8 @@ export function AgentHabitat() {
 
 						{/* Events stream */}
 						<div className="overflow-y-auto flex-1 pr-2" role="log" aria-label="Conversacion con ODI" aria-live="polite">
-							{events.length === 0 && phase !== "live" && <p className="text-sm text-[#4a5f7f]">Esperando conexion...</p>}
-							{events.length === 0 && phase === "live" && <p className="text-sm text-[#4a5f7f]">Conectado. Esperando impulsos...</p>}
+							{events.length === 0 && phase !== "live" && <p className="text-sm text-[#4a5f7f]">Buscando al organismo...</p>}
+							{events.length === 0 && phase === "live" && <p className="text-sm text-[#4a5f7f]">Estoy aqui. Escuchando...</p>}
 							<div className="grid gap-2">
 								{events.map((ev) => (
 									<article key={ev.event_id} className="rounded-lg border border-[#1a2a42] bg-[#0a1628] px-4 py-3" style={{ animation: "fadeIn 0.3s ease-out" }}>
@@ -993,7 +993,7 @@ export function AgentHabitat() {
 									{categories.length === 0 && (
 										<div className="py-4">
 											{[1,2,3].map(i => (<div key={i} className="rounded-lg bg-[#0a162855] h-8 mb-1 animate-pulse" />))}
-											<p className="text-[10px] text-[#4a5f7f] text-center mt-2">Cargando flujos del organismo...</p>
+											<p className="text-[10px] text-[#4a5f7f] text-center mt-2">Preparando los flujos...</p>
 										</div>
 									)}
 									{categories.map((cat: any) => {
@@ -1032,7 +1032,7 @@ export function AgentHabitat() {
 									{[1,2,3,4].map(i => (
 										<div key={i} className="rounded-lg bg-[#0a162855] h-10 animate-pulse" />
 									))}
-									<p className="text-[10px] text-[#4a5f7f] text-center">{panelLoading ? "Conectando con el organismo..." : "Reconectando..."}</p>
+									<p className="text-[10px] text-[#4a5f7f] text-center">{panelLoading ? "Despertando..." : "Volviendo..."}</p>
 								</div>
 							)}
 							{sideTab === "manifest" && liveManifest && (
@@ -1462,7 +1462,7 @@ export function AgentHabitat() {
 									{[1,2,3,4].map(i => (
 										<div key={i} className="rounded-lg bg-[#0a162855] h-10 animate-pulse" />
 									))}
-									<p className="text-[10px] text-[#4a5f7f] text-center">Recopilando estadisticas...</p>
+									<p className="text-[10px] text-[#4a5f7f] text-center">Contando latidos...</p>
 								</div>
 							)}
 							{sideTab === "stats" && stats && (
@@ -1517,7 +1517,7 @@ export function AgentHabitat() {
 							{sideTab === "manifest" && !liveManifest && (
 								<div className="grid gap-2 py-4">
 									{[1,2,3,4].map(i => (<div key={i} className="rounded-lg bg-[#0a162855] h-10 animate-pulse" />))}
-									<p className="text-[10px] text-[#4a5f7f] text-center">{panelLoading ? "Conectando con el organismo..." : "Reconectando..."}</p>
+									<p className="text-[10px] text-[#4a5f7f] text-center">{panelLoading ? "Despertando..." : "Volviendo..."}</p>
 								</div>
 							)}
 							{sideTab === "manifest" && liveManifest && (
@@ -1755,7 +1755,7 @@ export function AgentHabitat() {
 											</div>
 										);
 									})}
-									{flows.length === 0 && <p className="text-[10px] text-[#4a5f7f]">Cargando flujos...</p>}
+									{flows.length === 0 && <p className="text-[10px] text-[#4a5f7f]">Preparando flujos...</p>}
 								</div>
 							)}
 
