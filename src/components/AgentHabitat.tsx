@@ -137,14 +137,30 @@ export function AgentHabitat() {
 	}, []);
 	const [sideTab, setSideTab] = useState<SideTab>("manifest");
 
-	// ── Live data from backend ──
-	const [liveManifest, setLiveManifest] = useState<any>(null);
-	const [flows, setFlows] = useState<any[]>([]);
-	const [categories, setCategories] = useState<any[]>([]);
-	const [stats, setStats] = useState<any>(null);
+	// ── Live data from backend (with localStorage cache) ──
+	const [liveManifest, setLiveManifest] = useState<any>(() => {
+		if (typeof window === "undefined") return null;
+		try { const c = localStorage.getItem("odi_cache_manifest"); return c ? JSON.parse(c) : null; } catch { return null; }
+	});
+	const [flows, setFlows] = useState<any[]>(() => {
+		if (typeof window === "undefined") return [];
+		try { const c = localStorage.getItem("odi_cache_flows"); return c ? JSON.parse(c) : []; } catch { return []; }
+	});
+	const [categories, setCategories] = useState<any[]>(() => {
+		if (typeof window === "undefined") return [];
+		try { const c = localStorage.getItem("odi_cache_categories"); return c ? JSON.parse(c) : []; } catch { return []; }
+	});
+	const [stats, setStats] = useState<any>(() => {
+		if (typeof window === "undefined") return null;
+		try { const c = localStorage.getItem("odi_cache_stats"); return c ? JSON.parse(c) : null; } catch { return null; }
+	});
 
 	// ── Stores ──
-	const [stores, setStores] = useState<any[]>([]);
+	const [stores, setStores] = useState<any[]>(() => {
+		if (typeof window === "undefined") return [];
+		try { const c = localStorage.getItem("odi_cache_stores"); return c ? JSON.parse(c) : []; } catch { return []; }
+	});
+	const [panelLoading, setPanelLoading] = useState(!liveManifest);
 
 	// ── Return card ──
 	const [returnContext, setReturnContext] = useState<any>(null);
@@ -499,43 +515,54 @@ export function AgentHabitat() {
 		return () => { try { wake.stop(); } catch {} wakeRecRef.current = null; };
 	}, [userHasInteracted, inputMode, startContinuousListening, setInputMode, handleSend]);
 
+	// === Cached fetch helper ===
+	const cachedFetch = useCallback(async (url: string, cacheKey: string, setter: (d: any) => void, transform?: (d: any) => any) => {
+		try {
+			const ctrl = new AbortController();
+			const timeout = setTimeout(() => ctrl.abort(), 8000);
+			const r = await fetch(url, { signal: ctrl.signal });
+			clearTimeout(timeout);
+			if (r.ok) {
+				const d = await r.json();
+				const val = transform ? transform(d) : d;
+				setter(val);
+				try { localStorage.setItem(cacheKey, JSON.stringify(val)); } catch {}
+			}
+		} catch {}
+	}, []);
+
 	// === Load live manifest ===
 	useEffect(() => {
-		const load = async () => {
-			try { const r = await fetch(`${AGENT_API}/manifest`); if (r.ok) setLiveManifest(await r.json()); } catch {}
-		};
+		const load = () => cachedFetch(`${AGENT_API}/manifest`, "odi_cache_manifest", (d) => { setLiveManifest(d); setPanelLoading(false); });
 		load();
 		const iv = setInterval(load, 30000);
 		return () => clearInterval(iv);
-	}, []);
+	}, [cachedFetch]);
 
 	// === Load flows ===
 	useEffect(() => {
-		(async () => {
-			try {
-				const r = await fetch(`${AGENT_API}/flows`);
-				if (r.ok) { const d = await r.json(); setFlows(d.flows || []); setCategories(d.categories || []); }
-			} catch {}
-		})();
-	}, []);
+		cachedFetch(`${AGENT_API}/flows`, "odi_cache_flows", setFlows, (d) => {
+			setCategories(d.categories || []);
+			try { localStorage.setItem("odi_cache_categories", JSON.stringify(d.categories || [])); } catch {}
+			return d.flows || [];
+		});
+	}, [cachedFetch]);
 
 	// === Load stats ===
 	useEffect(() => {
-		const load = async () => { try { const r = await fetch(`${AGENT_API}/stats`); if (r.ok) setStats(await r.json()); } catch {} };
+		const load = () => cachedFetch(`${AGENT_API}/stats`, "odi_cache_stats", setStats);
 		load();
 		const iv = setInterval(load, 60000);
 		return () => clearInterval(iv);
-	}, []);
+	}, [cachedFetch]);
 
 	// === Load stores ===
 	useEffect(() => {
-		const load = async () => {
-			try { const r = await fetch(`${AGENT_API}/stores`); if (r.ok) { const d = await r.json(); setStores(d.stores || []); } } catch {}
-		};
+		const load = () => cachedFetch(`${AGENT_API}/stores`, "odi_cache_stores", setStores, (d) => d.stores || []);
 		load();
 		const iv = setInterval(load, 60000);
 		return () => clearInterval(iv);
-	}, []);
+	}, [cachedFetch]);
 
 	// === Flow player ===
 	const startFlow = useCallback(async (flowId: string) => {
@@ -917,6 +944,12 @@ export function AgentHabitat() {
 							{/* ── Flows tab ── */}
 							{sideTab === "flows" && (
 								<div className="grid gap-3">
+									{categories.length === 0 && (
+										<div className="py-4">
+											{[1,2,3].map(i => (<div key={i} className="rounded-lg bg-[#0a162855] h-8 mb-1 animate-pulse" />))}
+											<p className="text-[10px] text-[#4a5f7f] text-center mt-2">Cargando flujos del organismo...</p>
+										</div>
+									)}
 									{categories.map((cat: any) => {
 										const catFlows = flowsByCategory[cat.id] || [];
 										if (catFlows.length === 0) return null;
@@ -948,6 +981,14 @@ export function AgentHabitat() {
 							)}
 
 							{/* ── Manifest tab ── */}
+							{sideTab === "manifest" && !liveManifest && (
+								<div className="grid gap-2 py-4">
+									{[1,2,3,4].map(i => (
+										<div key={i} className="rounded-lg bg-[#0a162855] h-10 animate-pulse" />
+									))}
+									<p className="text-[10px] text-[#4a5f7f] text-center">{panelLoading ? "Conectando con el organismo..." : "Reconectando..."}</p>
+								</div>
+							)}
 							{sideTab === "manifest" && liveManifest && (
 								<div className="grid gap-3">
 									<div>
@@ -1370,6 +1411,14 @@ export function AgentHabitat() {
 							)}
 
 							{/* ── Stats tab ── */}
+							{sideTab === "stats" && !stats && (
+								<div className="grid gap-2 py-4">
+									{[1,2,3,4].map(i => (
+										<div key={i} className="rounded-lg bg-[#0a162855] h-10 animate-pulse" />
+									))}
+									<p className="text-[10px] text-[#4a5f7f] text-center">Recopilando estadisticas...</p>
+								</div>
+							)}
 							{sideTab === "stats" && stats && (
 								<div className="grid gap-3">
 									<div className="grid grid-cols-2 gap-2">
@@ -1419,6 +1468,12 @@ export function AgentHabitat() {
 								<button onClick={() => setShowSidebar(false)} className="ml-auto text-xs text-[#4a5f7f] bg-transparent border-none cursor-pointer px-2 py-1">&#x2715; Cerrar</button>
 							</div>
 
+							{sideTab === "manifest" && !liveManifest && (
+								<div className="grid gap-2 py-4">
+									{[1,2,3,4].map(i => (<div key={i} className="rounded-lg bg-[#0a162855] h-10 animate-pulse" />))}
+									<p className="text-[10px] text-[#4a5f7f] text-center">{panelLoading ? "Conectando con el organismo..." : "Reconectando..."}</p>
+								</div>
+							)}
 							{sideTab === "manifest" && liveManifest && (
 								<div className="grid gap-3">
 									{/* Services */}
