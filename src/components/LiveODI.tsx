@@ -81,6 +81,94 @@ function Bubble({ data, isODI }: { data: Msg; isODI: boolean }) {
 	);
 }
 
+// ─── Ephemeral Window System ───
+interface EphemeralData {
+	type: string;
+	ttl_ms: number;
+	data: any;
+}
+
+function ProductCardsEphemeral({ products, onDismiss }: { products: any[]; onDismiss: () => void }) {
+	return (
+		<div style={{ background: P.glass, border: `1px solid ${P.border}`, borderRadius: 16, padding: "16px 18px", backdropFilter: "blur(12px)", minWidth: 280, maxWidth: 400 }}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+				<VoiceTag voice="tony" />
+				<button onClick={onDismiss} style={{ background: "transparent", border: "none", color: P.textDim, cursor: "pointer", fontSize: "0.7rem" }}>✕</button>
+			</div>
+			<div style={{ display: "grid", gap: 8 }}>
+				{products.map((p: any, i: number) => (
+					<div key={i} style={{ background: "rgba(6,13,24,0.6)", border: `1px solid ${P.border}`, borderRadius: 10, padding: "10px 12px" }}>
+						<div style={{ fontSize: "0.74rem", fontWeight: 600, color: P.text }}>{p.title || p.titulo || ""}</div>
+						<div style={{ display: "flex", justifyContent: "space-between", marginTop: 3 }}>
+							<span style={{ fontSize: "0.8rem", color: P.alive, fontWeight: 700 }}>${parseFloat(p.price || p.precio || 0).toLocaleString("es-CO")}</span>
+							<span style={{ fontSize: "0.56rem", color: P.textDim }}>{p.from || p.tienda || ""}</span>
+						</div>
+					</div>
+				))}
+			</div>
+		</div>
+	);
+}
+
+function GuardianShieldEphemeral({ data }: { data: any }) {
+	return (
+		<div style={{ background: "rgba(255,68,102,0.08)", border: "2px solid #ff446644", borderRadius: 16, padding: "20px 24px", backdropFilter: "blur(12px)", minWidth: 280, textAlign: "center" }}>
+			<div style={{ fontSize: "1.5rem", marginBottom: 8 }}>🛡</div>
+			<p style={{ fontSize: "0.9rem", fontWeight: 600, color: P.care, margin: "0 0 6px" }}>Protocolo de cuidado activado</p>
+			<p style={{ fontSize: "0.72rem", color: P.textSoft, margin: 0 }}>Estoy aquí contigo. No estás solo.</p>
+		</div>
+	);
+}
+
+function InfoCardEphemeral({ data, onDismiss }: { data: any; onDismiss: () => void }) {
+	return (
+		<div style={{ background: P.glass, border: `1px solid ${P.border}`, borderRadius: 16, padding: "16px 18px", backdropFilter: "blur(12px)", minWidth: 260, maxWidth: 380 }}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+				<span style={{ fontSize: "0.72rem", fontWeight: 600, color: P.glow }}>{data.title || "Info"}</span>
+				<button onClick={onDismiss} style={{ background: "transparent", border: "none", color: P.textDim, cursor: "pointer", fontSize: "0.7rem" }}>✕</button>
+			</div>
+			<p style={{ fontSize: "0.76rem", color: P.textSoft, margin: 0, lineHeight: 1.5 }}>{data.content || ""}</p>
+			{data.source && <p style={{ fontSize: "0.56rem", color: P.textFaint, marginTop: 6 }}>Fuente: {data.source}</p>}
+		</div>
+	);
+}
+
+function EphemeralWindow({ ephemeral, products, onDismiss }: { ephemeral: EphemeralData | null; products: any[]; onDismiss: () => void }) {
+	const [visible, setVisible] = useState(true);
+	const [fading, setFading] = useState(false);
+
+	useEffect(() => {
+		if (!ephemeral) return;
+		setVisible(true);
+		setFading(false);
+		if (ephemeral.ttl_ms > 0) {
+			const timer = setTimeout(() => {
+				setFading(true);
+				setTimeout(onDismiss, 300);
+			}, ephemeral.ttl_ms);
+			return () => clearTimeout(timer);
+		}
+	}, [ephemeral, onDismiss]);
+
+	if (!ephemeral || !visible) return null;
+
+	const dismiss = () => { setFading(true); setTimeout(onDismiss, 300); };
+
+	return (
+		<div style={{
+			position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+			display: "flex", alignItems: "center", justifyContent: "center",
+			zIndex: 80, background: "rgba(2,5,9,0.5)",
+			animation: fading ? "fadeOut 0.3s ease forwards" : "fadeIn 0.3s ease",
+			pointerEvents: "auto",
+		}} onClick={(e) => { if (e.target === e.currentTarget) dismiss(); }}>
+			{ephemeral.type === "product_cards" && <ProductCardsEphemeral products={products} onDismiss={dismiss} />}
+			{ephemeral.type === "guardian_shield" && <GuardianShieldEphemeral data={ephemeral.data} />}
+			{ephemeral.type === "info_card" && <InfoCardEphemeral data={ephemeral.data} onDismiss={dismiss} />}
+		</div>
+	);
+}
+
 export default function LiveODI() {
 	const [phase, setPhase] = useState<"landing" | "awakening" | "habitat">("landing");
 	const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -88,6 +176,8 @@ export default function LiveODI() {
 	const [isSending, setIsSending] = useState(false);
 	const [orbColor, setOrbColor] = useState(P.glow);
 	const [isSpeaking, setIsSpeaking] = useState(false);
+	const [ephemeral, setEphemeral] = useState<EphemeralData | null>(null);
+	const [ephProducts, setEphProducts] = useState<any[]>([]);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const sessionRef = useRef(typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `s_${Date.now()}`);
@@ -178,6 +268,13 @@ export default function LiveODI() {
 				setOrbColor(voice === "tony" ? P.glow : P.spirit);
 				setMsgs(prev => [...prev, { role: "odi", text: responseText, voice, mode, products: products.length > 0 ? products : undefined }]);
 
+				// Ephemeral window from visual contract
+				const visual = data.visual;
+				if (visual && visual.type) {
+					setEphProducts(data.productos || []);
+					setEphemeral(visual);
+				}
+
 				// Auto-speak
 				speak(responseText, voice);
 			}
@@ -255,6 +352,9 @@ export default function LiveODI() {
 					</div>
 				)}
 
+				{/* Ephemeral window — APARECE, CUMPLE, SE DESVANECE */}
+				<EphemeralWindow ephemeral={ephemeral} products={ephProducts} onDismiss={() => setEphemeral(null)} />
+
 				{/* Habitat — conversation */}
 				{phase === "habitat" && hasConvo && (
 					<div ref={scrollRef} role="log" aria-live="polite"
@@ -298,6 +398,7 @@ export default function LiveODI() {
 				@keyframes orbBreathe { 0%,100%{transform:scale(1);filter:brightness(1)}40%{transform:scale(1.05);filter:brightness(1.12)}70%{transform:scale(0.98);filter:brightness(0.95)} }
 				@keyframes orbSpeak { 0%,100%{transform:scale(1);filter:brightness(1.1)}50%{transform:scale(1.12);filter:brightness(1.25)} }
 				@keyframes fadeIn { from{opacity:0}to{opacity:1} }
+			@keyframes fadeOut { from{opacity:1}to{opacity:0} }
 				@keyframes msgIn { from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)} }
 				*{box-sizing:border-box;margin:0}
 				::-webkit-scrollbar{width:2px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${P.textFaint};border-radius:2px}
