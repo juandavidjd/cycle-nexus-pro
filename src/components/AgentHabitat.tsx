@@ -162,6 +162,20 @@ export function AgentHabitat() {
 	});
 	const [panelLoading, setPanelLoading] = useState(!liveManifest);
 
+	// ── Accessibility ──
+	const [showAdaptarme, setShowAdaptarme] = useState(false);
+	const [a11yPrefs, setA11yPrefs] = useState(() => {
+		if (typeof window === "undefined") return { textSize: "normal", contrast: "normal", simplified: false };
+		try { const c = localStorage.getItem("odi_a11y"); return c ? JSON.parse(c) : { textSize: "normal", contrast: "normal", simplified: false }; } catch { return { textSize: "normal", contrast: "normal", simplified: false }; }
+	});
+	const updateA11y = useCallback((patch: any) => {
+		setA11yPrefs((prev: any) => {
+			const next = { ...prev, ...patch };
+			try { localStorage.setItem("odi_a11y", JSON.stringify(next)); } catch {}
+			return next;
+		});
+	}, []);
+
 	// ── Return card ──
 	const [returnContext, setReturnContext] = useState<any>(null);
 	const [showReturnCard, setShowReturnCard] = useState(false);
@@ -717,11 +731,11 @@ export function AgentHabitat() {
 	const showDebug = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("debug");
 
 	return (
-		<main className="min-h-screen bg-[#03070d] text-[#dbe7ff] font-sans">
+		<main className="min-h-screen bg-[#03070d] text-[#dbe7ff] font-sans" role="main" aria-label="LiveODI Habitat">
 			<div className="max-w-[1200px] mx-auto min-h-screen px-4 py-5">
 
 				{/* ── Header ── */}
-				<header className="flex items-center justify-between gap-3 mb-6">
+				<header className="flex items-center justify-between gap-3 mb-6" role="banner">
 					<div className="flex items-center gap-3">
 						<span className="text-sm tracking-[0.22em] text-[#7f95bb]">LIVEODI</span>
 						{returnVisit && <span className="text-xs px-2 py-0.5 rounded-full bg-[#6f6dff22] text-[#b8b6ff] border border-[#6f6dff44]">retorno</span>}
@@ -743,7 +757,7 @@ export function AgentHabitat() {
 
 					{/* ── Flame column ── */}
 					<section className={`flex flex-col items-center ${isMobile ? "pt-2 flex-row gap-3 justify-center" : "pt-8"}`}>
-						<div className={isMobile ? "w-16 h-16 rounded-full" : "w-28 h-28 rounded-full"} style={{
+						<div role="img" aria-label={`ODI estado: ${phase === "live" ? "activo" : phase}`} className={isMobile ? "w-16 h-16 rounded-full" : "w-28 h-28 rounded-full"} style={{
 							background: isSpeaking ? "radial-gradient(circle at 50% 35%, #ec4899 0%, #be185d 40%, #6f6dff 70%, transparent 100%)" : flameGradient[phase],
 							boxShadow: isSpeaking ? "0 0 40px #ec489988, inset 0 0 30px #ec489944" : flameShadow[phase],
 							animation: phase === "live" ? "breathe 4s ease-in-out infinite" : "none",
@@ -754,26 +768,57 @@ export function AgentHabitat() {
 						</p>
 						{phase === "live" && (
 							<>
-								<div className="flex gap-1.5 mt-3 flex-wrap justify-center">
-									{([
-										{ id: "voice" as InputMode, icon: "\uD83C\uDF99", label: "Voz" },
-										{ id: "text" as InputMode, icon: "\u2328", label: "Texto" },
-										{ id: "signs" as InputMode, icon: "\uD83E\uDD1F", label: "Se\u00f1as" },
-									] as const).map(door => (
-										<button key={door.id} onClick={() => {
-											if (door.id === "signs") return;
-											if (door.id === "voice") { setInputMode("voice"); if (!isListening) startContinuousListening(); }
-											else if (door.id === "text") { stopContinuousListening(); setInputMode("text"); }
-										}} className={`text-[10px] px-2.5 py-1.5 rounded-lg border cursor-pointer transition-all ${
-											inputMode === door.id ? "bg-[#49c2ff15] border-[#49c2ff44] text-[#dbe7ff]" : door.id === "signs" ? "bg-transparent border-[#1a2a42] text-[#3a4f6f] opacity-40 cursor-default" : "bg-transparent border-[#1a2a42] text-[#4a5f7f] hover:text-[#7f95bb]"
-										}`}>
-											<span className="text-sm">{door.icon}</span> {door.label}
-										</button>
-									))}
-									<button onClick={() => {}} className="text-[10px] px-2 py-1.5 rounded-lg border border-[#1a2a42] bg-transparent text-[#3a4f6f] opacity-40 cursor-default">
-										<span className="text-sm">&#x267F;</span> Adaptarme
+								<div className="flex gap-1.5 mt-3 flex-wrap justify-center" role="group" aria-label="Modo de entrada">
+									<button aria-label="Activar modo voz" aria-pressed={inputMode === "voice"} onClick={() => { setInputMode("voice"); if (!isListening) startContinuousListening(); }} className={`text-[10px] px-2.5 py-1.5 rounded-lg border cursor-pointer transition-all ${inputMode === "voice" ? "bg-[#49c2ff15] border-[#49c2ff44] text-[#dbe7ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f] hover:text-[#7f95bb]"}`}>
+										🎙 Voz
+									</button>
+									<button aria-label="Activar modo texto" aria-pressed={inputMode === "text"} onClick={() => { stopContinuousListening(); setInputMode("text"); }} className={`text-[10px] px-2.5 py-1.5 rounded-lg border cursor-pointer transition-all ${inputMode === "text" ? "bg-[#49c2ff15] border-[#49c2ff44] text-[#dbe7ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f] hover:text-[#7f95bb]"}`}>
+										⌨ Texto
+									</button>
+									<button aria-label="Modo señas — texto sin audio, iconos grandes" aria-pressed={inputMode === "signs"} onClick={() => { stopContinuousListening(); setInputMode("signs"); updateA11y({ textSize: "large", contrast: "high" }); }} className={`text-[10px] px-2.5 py-1.5 rounded-lg border cursor-pointer transition-all ${inputMode === "signs" ? "bg-[#49c2ff15] border-[#49c2ff44] text-[#dbe7ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f] hover:text-[#7f95bb]"}`}>
+										🤟 Señas
+									</button>
+									<button aria-label="Configurar accesibilidad" onClick={() => setShowAdaptarme(v => !v)} className={`text-[10px] px-2 py-1.5 rounded-lg border cursor-pointer transition-all ${showAdaptarme ? "bg-[#49c2ff15] border-[#49c2ff44] text-[#dbe7ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f] hover:text-[#7f95bb]"}`}>
+										♿ Adaptarme
 									</button>
 								</div>
+								{/* Adaptarme panel */}
+								{showAdaptarme && (
+									<div className="mt-2 p-2 rounded-lg border border-[#1a2a42] bg-[#0a1628] text-[10px]" role="region" aria-label="Preferencias de accesibilidad">
+										<div className="flex items-center justify-between mb-2">
+											<span className="text-[#49c2ff] font-semibold">Preferencias</span>
+											<button onClick={() => setShowAdaptarme(false)} className="text-[#4a5f7f] bg-transparent border-none cursor-pointer">&#x2715;</button>
+										</div>
+										<div className="grid gap-1.5">
+											<div className="flex items-center justify-between">
+												<span className="text-[#8ca0c6]">Texto</span>
+												<div className="flex gap-1">
+													{(["normal", "large", "xlarge"] as const).map(s => (
+														<button key={s} onClick={() => updateA11y({ textSize: s })} className={`px-1.5 py-0.5 rounded ${a11yPrefs.textSize === s ? "bg-[#49c2ff22] text-[#49c2ff]" : "text-[#4a5f7f]"} cursor-pointer bg-transparent border-none`}>
+															{s === "normal" ? "A" : s === "large" ? "A+" : "A++"}
+														</button>
+													))}
+												</div>
+											</div>
+											<div className="flex items-center justify-between">
+												<span className="text-[#8ca0c6]">Contraste</span>
+												<div className="flex gap-1">
+													{(["normal", "high"] as const).map(c => (
+														<button key={c} onClick={() => updateA11y({ contrast: c })} className={`px-1.5 py-0.5 rounded ${a11yPrefs.contrast === c ? "bg-[#49c2ff22] text-[#49c2ff]" : "text-[#4a5f7f]"} cursor-pointer bg-transparent border-none`}>
+															{c === "normal" ? "Normal" : "Alto"}
+														</button>
+													))}
+												</div>
+											</div>
+											<div className="flex items-center justify-between">
+												<span className="text-[#8ca0c6]">Vista simplificada</span>
+												<button onClick={() => updateA11y({ simplified: !a11yPrefs.simplified })} className={`px-1.5 py-0.5 rounded ${a11yPrefs.simplified ? "bg-[#49c2ff22] text-[#49c2ff]" : "text-[#4a5f7f]"} cursor-pointer bg-transparent border-none`}>
+													{a11yPrefs.simplified ? "Si" : "No"}
+												</button>
+											</div>
+										</div>
+									</div>
+								)}
 								<button onClick={() => setShowSidebar((v) => !v)} className="mt-2 text-[10px] text-[#49c2ff] hover:text-[#9be2ff] transition-colors cursor-pointer bg-transparent border-none">
 									{showSidebar ? "Ocultar panel" : "Panel"}
 								</button>
@@ -809,11 +854,12 @@ export function AgentHabitat() {
 									</div>
 								) : (
 									<div className="flex gap-2">
-										<input ref={inputRef} type="text" autoComplete="off" placeholder="Escribe a ODI..." value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSend()} disabled={isSending}
+										<input ref={inputRef} type="text" autoComplete="off" aria-label="Mensaje para ODI" placeholder="Escribe a ODI..." value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSend()} disabled={isSending}
 											className="flex-1 rounded-xl border border-[#35537c] bg-[rgba(7,18,33,0.7)] text-[#ddebff] px-4 py-3 text-sm outline-none focus:border-[#49c2ff] transition-colors disabled:opacity-50" />
 										<button onClick={() => handleSend()} disabled={isSending || !chatInput.trim()}
 											className="px-4 py-3 rounded-xl border border-[#35537c] bg-[#49c2ff11] text-[#49c2ff] text-sm cursor-pointer hover:bg-[#49c2ff22] transition-colors disabled:opacity-30 disabled:cursor-default">
 											{isSending ? "..." : "Enviar"}
+
 										</button>
 									</div>
 								)}
@@ -907,7 +953,7 @@ export function AgentHabitat() {
 						)}
 
 						{/* Events stream */}
-						<div className="overflow-y-auto flex-1 pr-2">
+						<div className="overflow-y-auto flex-1 pr-2" role="log" aria-label="Conversacion con ODI" aria-live="polite">
 							{events.length === 0 && phase !== "live" && <p className="text-sm text-[#4a5f7f]">Esperando conexion...</p>}
 							{events.length === 0 && phase === "live" && <p className="text-sm text-[#4a5f7f]">Conectado. Esperando impulsos...</p>}
 							<div className="grid gap-2">
@@ -921,7 +967,7 @@ export function AgentHabitat() {
 											<span className="text-xs text-[#3a4f6f] ml-auto">{timeAgo(ev.ts)}</span>
 										</div>
 										{ev.system_action?.status && <p className="text-sm text-[#b6e5ff] mb-1">{ev.system_action.status}</p>}
-										{ev.payload?.text && <p className="text-sm text-[#8ca0c6]">{ev.payload.text}</p>}
+										{ev.payload?.text && <p className={`${a11yPrefs.textSize === "xlarge" ? "text-lg" : a11yPrefs.textSize === "large" ? "text-base" : "text-sm"} ${a11yPrefs.contrast === "high" ? "text-[#dbe7ff]" : "text-[#8ca0c6]"}`}>{ev.payload.text}</p>}
 									</article>
 								))}
 							</div>
@@ -930,7 +976,7 @@ export function AgentHabitat() {
 
 					{/* ── Sidebar: Flows / Manifest / Stats ── */}
 					{showSidebar && !isMobile && (
-						<aside className="rounded-lg border border-[#1a2a42] bg-[#0a1628] p-3 overflow-y-scroll" style={{ height: "calc(100vh - 120px)", WebkitOverflowScrolling: "touch" }}>
+						<aside className="rounded-lg border border-[#1a2a42] bg-[#0a1628] p-3 overflow-y-scroll" style={{ height: "calc(100vh - 120px)", WebkitOverflowScrolling: "touch" }} role="complementary" aria-label="Panel del ecosistema ODI">
 							{/* Tabs */}
 							<div className="flex gap-1 mb-3">
 								{(["flows", "manifest", "stats"] as SideTab[]).map((t) => (
