@@ -1685,6 +1685,37 @@ export function AgentHabitat() {
 									)}
 
 									{/* Version + freshness footer */}
+									{/* Narrativa viva (mobile) */}
+									{liveManifest.narrative && (
+										<div className="rounded-lg p-2.5 border border-[#49c2ff22] mt-1" style={{ background: "linear-gradient(135deg, #49c2ff06, #03070d)" }}>
+											<div className="text-[10px] text-[#8ca0c6] font-medium mb-1.5">{liveManifest.narrative.summary}</div>
+											<div className="space-y-1">
+												{[
+													{ key: "billing", color: "#4caf50" },
+													{ key: "guardian", color: liveManifest.narrative.guardian_health === "verde" ? "#3af08f" : liveManifest.narrative.guardian_health === "amarillo" ? "#ffcc00" : "#ff9800" },
+													{ key: "pipeline", color: "#ffcc00" },
+													{ key: "ces", color: "#ef5350" },
+													{ key: "leads", color: "#26a69a" },
+													{ key: "tourism", color: "#ff7043" },
+													{ key: "logs", color: "#78909c" },
+												].map(({ key, color }) => {
+													const text = liveManifest.narrative[key];
+													const voice = liveManifest.narrative[`${key}_voice`];
+													if (!text) return null;
+													return (
+														<div key={key} className="text-[9px]">
+															<span style={{ color }}>●</span>
+															<span className="text-[#8ca0c6] ml-1">{text}</span>
+															{voice && <span className="text-[#4a5f7f] ml-1 italic">— {voice}</span>}
+														</div>
+													);
+												})}
+											</div>
+											{liveManifest.narrative.summary_voice && (
+												<div className="text-[9px] text-[#49c2ff] mt-1.5 italic">"{liveManifest.narrative.summary_voice}"</div>
+											)}
+										</div>
+									)}
 									<div className="text-[10px] pt-2 border-t border-[#1a2a42]">
 										<div className="flex items-center justify-between">
 											<span className="text-[#4a5f7f]">v{liveManifest.version} · {liveManifest.flows_available} flows</span>
