@@ -178,6 +178,12 @@ export default function LiveODI() {
 	const [isSpeaking, setIsSpeaking] = useState(false);
 	const [ephemeral, setEphemeral] = useState<EphemeralData | null>(null);
 	const [ephProducts, setEphProducts] = useState<any[]>([]);
+	const [accessMode, setAccessMode] = useState<string>(() => {
+		if (typeof window === "undefined") return "normal";
+		return localStorage.getItem("odi_a11y_mode") || "normal";
+	});
+	const [a11yOpen, setA11yOpen] = useState(false);
+	const fontSize = accessMode === "large" ? 1.25 : 1;
 	const inputRef = useRef<HTMLInputElement>(null);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const sessionRef = useRef(typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `s_${Date.now()}`);
@@ -275,8 +281,10 @@ export default function LiveODI() {
 					setEphemeral(visual);
 				}
 
-				// Auto-speak
-				speak(responseText, voice);
+				// Auto-speak (only if not text-only or signs mode)
+				if (accessMode !== "text" && accessMode !== "signs") {
+					speak(responseText, voice);
+				}
 			}
 		} catch {
 			setMsgs(prev => [...prev, { role: "odi", text: "No pude conectar. Intenta de nuevo.", voice: "ramona", mode: "care" }]);
@@ -285,23 +293,57 @@ export default function LiveODI() {
 	}, [input, isSending, speak]);
 
 	return (
-		<div lang="es" style={{
+		<div lang="es" role="application" aria-label="LiveODI Habitat" style={{
 			minHeight: "100vh",
 			background: `radial-gradient(ellipse at 50% 15%, ${P.deep} 0%, ${P.void} 65%)`,
-			color: P.text, fontFamily: "'DM Sans', system-ui, sans-serif",
+			color: accessMode === "large" ? "#f0f4ff" : P.text,
+			fontFamily: "'DM Sans', system-ui, sans-serif",
+			fontSize: `${fontSize}rem`,
 			display: "flex", flexDirection: "column", overflow: "hidden",
 		}}>
 			{/* Header */}
-			<header style={{ padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+			<header role="banner" style={{ padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
 				<div style={{ display: "flex", alignItems: "center", gap: 10 }}>
 					<span style={{ fontSize: "0.6rem", letterSpacing: "0.22em", color: P.textDim, fontWeight: 600 }}>O D I</span>
-					<span style={{ width: 6, height: 6, borderRadius: "50%", background: P.alive, boxShadow: `0 0 8px ${P.alive}44` }} />
+					<span aria-label="Organismo activo" style={{ width: 6, height: 6, borderRadius: "50%", background: P.alive, boxShadow: `0 0 8px ${P.alive}44` }} />
 				</div>
-				{isSpeaking && <span style={{ fontSize: "0.5rem", color: P.spirit, animation: "fadeIn 0.3s" }}>hablando...</span>}
+				<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+					{isSpeaking && <span style={{ fontSize: "0.5rem", color: P.spirit, animation: "fadeIn 0.3s" }}>hablando...</span>}
+					<button onClick={() => setA11yOpen(!a11yOpen)} aria-label="Opciones de accesibilidad"
+						style={{ background: "transparent", border: `1px solid ${P.border}`, borderRadius: 8, padding: "4px 10px", color: P.textDim, fontSize: "0.58rem", cursor: "pointer", fontFamily: "inherit" }}>
+						♿ Adaptarme
+					</button>
+				</div>
 			</header>
 
+			{/* A11y bar */}
+			{a11yOpen && (
+				<nav aria-label="Modos de accesibilidad" style={{ display: "flex", gap: 3, overflowX: "auto", padding: "6px 16px", animation: "fadeIn 0.3s ease" }}>
+					{[
+						{ id: "normal", label: "Estandar", icon: "👁" },
+						{ id: "voice", label: "Solo voz", icon: "🎙" },
+						{ id: "text", label: "Solo texto", icon: "💬" },
+						{ id: "large", label: "Grande", icon: "🔍" },
+						{ id: "signs", label: "Senas", icon: "🤟" },
+					].map(m => (
+						<button key={m.id} onClick={() => { setAccessMode(m.id); setA11yOpen(false); localStorage.setItem("odi_a11y_mode", m.id); }}
+							aria-pressed={accessMode === m.id}
+							style={{
+								background: accessMode === m.id ? `${P.glow}15` : "transparent",
+								border: `1px solid ${accessMode === m.id ? P.glow + "55" : P.border}`,
+								borderRadius: 8, padding: "4px 10px",
+								color: accessMode === m.id ? P.glow : P.textDim,
+								fontSize: "0.58rem", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
+								display: "flex", alignItems: "center", gap: 4,
+							}}>
+							<span aria-hidden>{m.icon}</span> {m.label}
+						</button>
+					))}
+				</nav>
+			)}
+
 			{/* Main */}
-			<main style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: hasConvo ? "flex-start" : "center", padding: "0 16px", transition: "all 0.6s ease" }}>
+			<main role="main" aria-label="Conversacion con ODI" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: hasConvo ? "flex-start" : "center", padding: "0 16px", transition: "all 0.6s ease" }}>
 				{/* Orb */}
 				<div style={{
 					transition: "all 0.9s cubic-bezier(0.22, 0.61, 0.36, 1)",
@@ -364,9 +406,9 @@ export default function LiveODI() {
 				)}
 			</main>
 
-			{/* Input */}
-			{phase === "habitat" && (
-				<footer style={{ padding: "10px 16px 20px", maxWidth: 620, width: "100%", margin: "0 auto" }}>
+			{/* Input — hidden in "voice" only mode */}
+			{phase === "habitat" && accessMode !== "voice" && (
+				<footer role="contentinfo" style={{ padding: "10px 16px 20px", maxWidth: 620, width: "100%", margin: "0 auto" }}>
 					<div style={{
 						display: "flex", alignItems: "center",
 						background: P.glass, border: `1px solid ${P.border}`,
