@@ -133,6 +133,39 @@ function InfoCardEphemeral({ data, onDismiss }: { data: any; onDismiss: () => vo
 	);
 }
 
+function RegistrationPrompt({ prompt, onAccept, onSkip }: { prompt: { type: string; text: string; acceptLabel: string }; onAccept: () => void; onSkip: () => void }) {
+	return (
+		<div style={{
+			position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+			display: "flex", alignItems: "center", justifyContent: "center",
+			zIndex: 90, background: "rgba(2,5,9,0.5)",
+			animation: "fadeIn 0.3s ease",
+		}} onClick={(e) => { if (e.target === e.currentTarget) onSkip(); }}>
+			<div style={{
+				background: "rgba(11,22,37,0.92)", border: `1px solid ${P.warm}22`,
+				borderRadius: 16, padding: "20px 24px", backdropFilter: "blur(12px)",
+				maxWidth: 320, animation: "msgIn 0.3s ease",
+			}}>
+				<p style={{ margin: "0 0 14px", fontSize: "0.78rem", color: P.textSoft, lineHeight: 1.5 }}>{prompt.text}</p>
+				<div style={{ display: "flex", gap: 8 }}>
+					<button onClick={onAccept} style={{
+						padding: "6px 16px", borderRadius: 8,
+						background: `${P.warm}18`, border: `1px solid ${P.warm}33`,
+						color: P.warm, fontSize: "0.68rem", fontWeight: 600,
+						cursor: "pointer", fontFamily: "inherit",
+					}}>{prompt.acceptLabel}</button>
+					<button onClick={onSkip} style={{
+						padding: "6px 16px", borderRadius: 8,
+						background: "transparent", border: `1px solid ${P.border}`,
+						color: P.textDim, fontSize: "0.68rem",
+						cursor: "pointer", fontFamily: "inherit",
+					}}>Ahora no</button>
+				</div>
+			</div>
+		</div>
+	);
+}
+
 function EphemeralWindow({ ephemeral, products, onDismiss }: { ephemeral: EphemeralData | null; products: any[]; onDismiss: () => void }) {
 	const [visible, setVisible] = useState(true);
 	const [fading, setFading] = useState(false);
@@ -184,6 +217,22 @@ export default function LiveODI() {
 	});
 	const [a11yOpen, setA11yOpen] = useState(false);
 	const fontSize = accessMode === "large" ? 1.25 : 1;
+
+	// ── Registration progresivo HER ──
+	const [regState, setRegState] = useState(() => {
+		if (typeof window === "undefined") return { voice: false, photo: false, santo: false, dismissed: { voice: false, photo: false, santo: false } };
+		try { const c = localStorage.getItem("odi_reg"); return c ? JSON.parse(c) : { voice: false, photo: false, santo: false, dismissed: { voice: false, photo: false, santo: false } }; } catch { return { voice: false, photo: false, santo: false, dismissed: { voice: false, photo: false, santo: false } }; }
+	});
+	const turnRef = useRef(0);
+	const [regPrompt, setRegPrompt] = useState<{ type: string; text: string; acceptLabel: string } | null>(null);
+
+	const saveReg = useCallback((patch: any) => {
+		setRegState((prev: any) => {
+			const next = { ...prev, ...patch, dismissed: { ...prev.dismissed, ...(patch.dismissed || {}) } };
+			try { localStorage.setItem("odi_reg", JSON.stringify(next)); } catch {}
+			return next;
+		});
+	}, []);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const sessionRef = useRef(typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `s_${Date.now()}`);
@@ -252,6 +301,7 @@ export default function LiveODI() {
 		if (!text || isSending) return;
 		setInput("");
 		setIsSending(true);
+		turnRef.current++;
 
 		setMsgs(prev => [...prev, { role: "user", text }]);
 
@@ -290,7 +340,17 @@ export default function LiveODI() {
 			setMsgs(prev => [...prev, { role: "odi", text: "No pude conectar. Intenta de nuevo.", voice: "ramona", mode: "care" }]);
 		}
 		setIsSending(false);
-	}, [input, isSending, speak]);
+
+		// Registration progresivo HER
+		const t = turnRef.current;
+		if (t === 3 && !regState.voice && !regState.dismissed.voice) {
+			setTimeout(() => setRegPrompt({ type: "voice", text: "Puedo escucharte si activas el microfono. No grabo nada — solo escucho en el momento.", acceptLabel: "Activar voz" }), 1500);
+		} else if (t === 8 && !regState.photo && !regState.dismissed.photo) {
+			setTimeout(() => setRegPrompt({ type: "photo", text: "Tu rostro me ayuda a saber que eres tu. ¿Me permites verte?", acceptLabel: "Activar camara" }), 1500);
+		} else if (t === 14 && !regState.santo && !regState.dismissed.santo) {
+			setTimeout(() => setRegPrompt({ type: "santo", text: "Elige una frase que solo tu y yo conozcamos. Tu santo y sena.", acceptLabel: "Elegir frase" }), 1500);
+		}
+	}, [input, isSending, speak, regState]);
 
 	return (
 		<div lang="es" role="application" aria-label="LiveODI Habitat" style={{
@@ -309,6 +369,14 @@ export default function LiveODI() {
 				</div>
 				<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
 					{isSpeaking && <span style={{ fontSize: "0.5rem", color: P.spirit, animation: "fadeIn 0.3s" }}>hablando...</span>}
+					{/* Registration dots */}
+					{phase === "habitat" && (
+						<div style={{ display: "flex", gap: 3 }} title="Registro: voz · rostro · santo y sena" aria-label={`Registro: ${[regState.voice && "voz", regState.photo && "rostro", regState.santo && "santo y sena"].filter(Boolean).join(", ") || "pendiente"}`}>
+							{(["voice", "photo", "santo"] as const).map(k => (
+								<span key={k} style={{ width: 5, height: 5, borderRadius: "50%", background: regState[k] ? P.alive : P.textFaint, transition: "all 0.5s" }} />
+							))}
+						</div>
+					)}
 					<button onClick={() => setA11yOpen(!a11yOpen)} aria-label="Opciones de accesibilidad"
 						style={{ background: "transparent", border: `1px solid ${P.border}`, borderRadius: 8, padding: "4px 10px", color: P.textDim, fontSize: "0.58rem", cursor: "pointer", fontFamily: "inherit" }}>
 						♿ Adaptarme
@@ -396,6 +464,21 @@ export default function LiveODI() {
 
 				{/* Ephemeral window — APARECE, CUMPLE, SE DESVANECE */}
 				<EphemeralWindow ephemeral={ephemeral} products={ephProducts} onDismiss={() => setEphemeral(null)} />
+
+				{/* Registration prompt — progresivo HER */}
+				{regPrompt && (
+					<RegistrationPrompt
+						prompt={regPrompt}
+						onAccept={() => {
+							saveReg({ [regPrompt.type]: true });
+							setRegPrompt(null);
+						}}
+						onSkip={() => {
+							saveReg({ dismissed: { [regPrompt.type]: true } });
+							setRegPrompt(null);
+						}}
+					/>
+				)}
 
 				{/* Habitat — conversation */}
 				{phase === "habitat" && hasConvo && (
