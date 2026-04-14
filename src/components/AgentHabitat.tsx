@@ -555,11 +555,24 @@ export function AgentHabitat() {
 		} catch {}
 	}, []);
 
+	// === Auto-refresh on tab focus ===
+	useEffect(() => {
+		const onFocus = () => {
+			cachedFetch(`${AGENT_API}/manifest`, "odi_cache_manifest", (d) => { setLiveManifest(d); setPanelLoading(false); });
+			cachedFetch(`${AGENT_API}/stats`, "odi_cache_stats", setStats);
+			cachedFetch(`${AGENT_API}/events/recent`, "odi_cache_events", setRecentEvents, (d) => d.events || []);
+			cachedFetch(`${AGENT_API}/domains`, "odi_cache_domains", setDomains);
+			cachedFetch(`${AGENT_API}/stores`, "odi_cache_stores", setStores, (d) => d.stores || []);
+		};
+		document.addEventListener("visibilitychange", () => { if (!document.hidden) onFocus(); });
+		return () => document.removeEventListener("visibilitychange", onFocus);
+	}, [cachedFetch]);
+
 	// === Load live manifest ===
 	useEffect(() => {
 		const load = () => cachedFetch(`${AGENT_API}/manifest`, "odi_cache_manifest", (d) => { setLiveManifest(d); setPanelLoading(false); });
 		load();
-		const iv = setInterval(load, 30000);
+		const iv = setInterval(load, 15000);
 		return () => clearInterval(iv);
 	}, [cachedFetch]);
 
@@ -576,7 +589,7 @@ export function AgentHabitat() {
 	useEffect(() => {
 		const load = () => cachedFetch(`${AGENT_API}/stats`, "odi_cache_stats", setStats);
 		load();
-		const iv = setInterval(load, 60000);
+		const iv = setInterval(load, 30000);
 		return () => clearInterval(iv);
 	}, [cachedFetch]);
 
@@ -584,23 +597,23 @@ export function AgentHabitat() {
 	useEffect(() => {
 		const load = () => cachedFetch(`${AGENT_API}/stores`, "odi_cache_stores", setStores, (d) => d.stores || []);
 		load();
-		const iv = setInterval(load, 60000);
+		const iv = setInterval(load, 30000);
 		return () => clearInterval(iv);
 	}, [cachedFetch]);
 
-	// === Load domains ===
+	// === Load domains (refresh every 60s) ===
 	useEffect(() => {
-		cachedFetch(`${AGENT_API}/domains`, "odi_cache_domains", setDomains);
-		// Retry after 5s if null
-		const retry = setTimeout(() => { if (!domains) cachedFetch(`${AGENT_API}/domains`, "odi_cache_domains", setDomains); }, 5000);
-		return () => clearTimeout(retry);
+		const load = () => cachedFetch(`${AGENT_API}/domains`, "odi_cache_domains", setDomains);
+		load();
+		const iv = setInterval(load, 60000);
+		return () => clearInterval(iv);
 	}, [cachedFetch]);
 
 	// === Load recent events ===
 	useEffect(() => {
 		const load = () => cachedFetch(`${AGENT_API}/events/recent`, "odi_cache_events", setRecentEvents, (d) => d.events || []);
 		load();
-		const iv = setInterval(load, 30000);
+		const iv = setInterval(load, 15000);
 		return () => clearInterval(iv);
 	}, [cachedFetch]);
 
