@@ -250,6 +250,29 @@ export default function LiveODI() {
 	const isPlayingRef = useRef(false);
 	const hasConvo = msgs.length > 0 && phase === "habitat";
 
+	// TTS — declared early so useEffects can reference it
+	const speak = useCallback(async (text: string, voice: string = "ramona") => {
+		if (isPlayingRef.current || !text) return;
+		try {
+			isPlayingRef.current = true;
+			setIsSpeaking(true);
+			const resp = await fetch(SPEAK_URL, {
+				method: "POST", headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ text: text.slice(0, 500), voice }),
+			});
+			if (resp.ok) {
+				const blob = await resp.blob();
+				const url = URL.createObjectURL(blob);
+				const audio = audioRef.current || new Audio();
+				audioRef.current = audio;
+				audio.onended = () => { isPlayingRef.current = false; setIsSpeaking(false); URL.revokeObjectURL(url); };
+				audio.onerror = () => { isPlayingRef.current = false; setIsSpeaking(false); };
+				audio.src = url;
+				await audio.play();
+			} else { isPlayingRef.current = false; setIsSpeaking(false); }
+		} catch { isPlayingRef.current = false; setIsSpeaking(false); }
+	}, []);
+
 	// Scroll on new messages
 	useEffect(() => {
 		scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -292,29 +315,6 @@ export default function LiveODI() {
 		seq();
 		return () => { cancelled = true; };
 	}, [phase, accessMode, speak]);
-
-	// TTS
-	const speak = useCallback(async (text: string, voice: string = "ramona") => {
-		if (isPlayingRef.current || !text) return;
-		try {
-			isPlayingRef.current = true;
-			setIsSpeaking(true);
-			const resp = await fetch(SPEAK_URL, {
-				method: "POST", headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ text: text.slice(0, 500), voice }),
-			});
-			if (resp.ok) {
-				const blob = await resp.blob();
-				const url = URL.createObjectURL(blob);
-				const audio = audioRef.current || new Audio();
-				audioRef.current = audio;
-				audio.onended = () => { isPlayingRef.current = false; setIsSpeaking(false); URL.revokeObjectURL(url); };
-				audio.onerror = () => { isPlayingRef.current = false; setIsSpeaking(false); };
-				audio.src = url;
-				await audio.play();
-			} else { isPlayingRef.current = false; setIsSpeaking(false); }
-		} catch { isPlayingRef.current = false; setIsSpeaking(false); }
-	}, []);
 
 	// Send message to Chat API
 	const send = useCallback(async () => {
