@@ -19,6 +19,7 @@ import NotFound from "./pages/NotFound";
 import Manager from "./pages/Manager";
 import AgentPage from "./pages/AgentHabitat";
 import LiveODIPage from "./pages/LiveODIPage";
+import LiveODI from "./components/LiveODI";
 
 // ─── Habitat (liveodi.com) ───
 import HabitatLayout from "./components/habitat/HabitatLayout";
@@ -32,14 +33,16 @@ function AppContent() {
 
   switch (skin.layout) {
     case "habitat":
-      return <HabitatLayout />;
+      return (
+        <Routes>
+          <Route path="/panel" element={<AgentPage />} />
+          <Route path="*" element={<LiveODI />} />
+        </Routes>
+      );
     case "srm":
       return <SRMRoutes />;
-    // Futuro:
-    // case "adsi": return <ADSILayout />;
-    // case "catrmu": return <CATRMULayout />;
     default:
-      return <HabitatLayout />;
+      return <LiveODI />;
   }
 }
 
