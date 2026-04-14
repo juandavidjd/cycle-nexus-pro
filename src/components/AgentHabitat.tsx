@@ -17,7 +17,7 @@ interface AgentEvent {
 
 type Phase = "idle" | "connecting" | "registering" | "live" | "offline";
 type InputMode = "text" | "voice" | "signs";
-type SideTab = "flows" | "manifest" | "stats";
+type SideTab = "flows" | "manifest" | "stats" | "events" | "domains";
 
 // ── Constants ──
 const WS_URLS = [
@@ -154,6 +154,10 @@ export function AgentHabitat() {
 		if (typeof window === "undefined") return null;
 		try { const c = localStorage.getItem("odi_cache_stats"); return c ? JSON.parse(c) : null; } catch { return null; }
 	});
+
+	// ── Domains + Events ──
+	const [domains, setDomains] = useState<any>(null);
+	const [recentEvents, setRecentEvents] = useState<any[]>([]);
 
 	// ── Stores ──
 	const [stores, setStores] = useState<any[]>(() => {
@@ -578,6 +582,19 @@ export function AgentHabitat() {
 		return () => clearInterval(iv);
 	}, [cachedFetch]);
 
+	// === Load domains ===
+	useEffect(() => {
+		cachedFetch(`${AGENT_API}/domains`, "odi_cache_domains", setDomains);
+	}, [cachedFetch]);
+
+	// === Load recent events ===
+	useEffect(() => {
+		const load = () => cachedFetch(`${AGENT_API}/events/recent`, "odi_cache_events", setRecentEvents, (d) => d.events || []);
+		load();
+		const iv = setInterval(load, 30000);
+		return () => clearInterval(iv);
+	}, [cachedFetch]);
+
 	// === Flow player ===
 	const startFlow = useCallback(async (flowId: string) => {
 		try {
@@ -735,20 +752,18 @@ export function AgentHabitat() {
 			<div className="max-w-[1200px] mx-auto min-h-screen px-4 py-5">
 
 				{/* ── Header ── */}
-				<header className="flex items-center justify-between gap-3 mb-6" role="banner">
+				<header className="flex items-center justify-between gap-3 mb-4" role="banner">
 					<div className="flex items-center gap-3">
-						<span className="text-sm tracking-[0.22em] text-[#7f95bb]">LIVEODI</span>
-						{returnVisit && <span className="text-xs px-2 py-0.5 rounded-full bg-[#6f6dff22] text-[#b8b6ff] border border-[#6f6dff44]">retorno</span>}
-						{isSpeaking && <span className="text-xs px-2 py-0.5 rounded-full bg-[#ec489922] text-[#ec4899] border border-[#ec489944] animate-pulse">hablando</span>}
+						<span className="text-xs tracking-[0.18em] text-[#4a5f7f] font-semibold">ODI PANEL</span>
+						<span className="w-2 h-2 rounded-full bg-[#3af08f] shadow-[0_0_8px_#3af08f66]" title="LiveODI activo" />
 						{liveManifest && (
-							<span className="text-xs text-[#4a5f7f]">
-								{liveManifest.stores_active || 0} tiendas · {(liveManifest.products_total || 0).toLocaleString()} productos · {liveManifest.services_alive}/{liveManifest.services_total} servicios
+							<span className="text-[10px] text-[#4a5f7f]">
+								{liveManifest.services_alive}/{liveManifest.services_total} srv · {liveManifest.stores_active || 0} tiendas · {(liveManifest.products_total || 0).toLocaleString()} prod
 							</span>
 						)}
 					</div>
-					<div className="flex items-center gap-3">
-						<span className="text-sm text-[#b6e5ff] opacity-90">{statusLabel[phase]}</span>
-						<span className={`w-2.5 h-2.5 rounded-full ${statusDot[phase]}`} />
+					<div className="flex items-center gap-2">
+						<a href="/" className="text-[10px] text-[#49c2ff] hover:text-[#9be2ff]">← Habitat</a>
 					</div>
 				</header>
 
@@ -981,10 +996,10 @@ export function AgentHabitat() {
 						<aside className="rounded-lg border border-[#1a2a42] bg-[#0a1628] p-3 overflow-y-scroll" style={{ height: "calc(100vh - 120px)", WebkitOverflowScrolling: "touch" }} role="complementary" aria-label="Panel del ecosistema ODI">
 							{/* Tabs */}
 							<div className="flex gap-1 mb-3">
-								{(["flows", "manifest", "stats"] as SideTab[]).map((t) => (
+								{(["manifest", "events", "domains", "flows", "stats"] as SideTab[]).map((t) => (
 									<button key={t} onClick={() => setSideTab(t)}
 										className={`text-[10px] px-2 py-1 rounded-full border cursor-pointer transition-colors ${sideTab === t ? "bg-[#49c2ff22] border-[#49c2ff44] text-[#49c2ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f] hover:text-[#7f95bb]"}`}>
-										{t === "flows" ? `Flujos (${flows.length})` : t === "manifest" ? "Manifest" : "Stats"}
+										{t === "manifest" ? "Manifest" : t === "events" ? "Eventos" : t === "domains" ? "Dominios" : t === "flows" ? `Flujos (${flows.length})` : "Stats"}
 									</button>
 								))}
 							</div>
@@ -1496,6 +1511,62 @@ export function AgentHabitat() {
 									<p className="text-[9px] text-[#4a5f7f]">
 										{stats.sessions_active} sesiones activas ahora
 									</p>
+								</div>
+							)}
+
+							{/* ── Events tab ── */}
+							{sideTab === "events" && (
+								<div className="grid gap-1.5">
+									{recentEvents.length === 0 && (
+										<p className="text-[10px] text-[#4a5f7f] py-4 text-center">Cargando eventos...</p>
+									)}
+									{recentEvents.map((ev: any, i: number) => (
+										<div key={i} className="rounded border border-[#1a2a42] bg-[#03070d] px-2.5 py-1.5">
+											<div className="flex items-center gap-1.5 mb-0.5">
+												<span className="text-[10px] font-semibold px-1 rounded" style={{ color: SOURCE_COLORS[ev.source] || "#7f95bb", backgroundColor: `${SOURCE_COLORS[ev.source] || "#7f95bb"}15` }}>{ev.source}</span>
+												<span className="text-[9px] text-[#4a5f7f]">{ev.type}</span>
+												{ev.voice && <span className="text-[9px] text-[#4a5f7f]">({ev.voice})</span>}
+												<span className="text-[8px] text-[#3a4f6f] ml-auto">{ev.ts ? new Date(ev.ts).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" }) : ""}</span>
+											</div>
+											{ev.status && <p className="text-[9px] text-[#8ca0c6]">{ev.status}</p>}
+											{ev.text && <p className="text-[9px] text-[#4a5f7f]">{(ev.text || "").slice(0, 100)}</p>}
+										</div>
+									))}
+								</div>
+							)}
+
+							{/* ── Domains tab ── */}
+							{sideTab === "domains" && domains && (
+								<div className="grid gap-2">
+									<div className="flex items-center justify-between text-[10px] mb-1">
+										<span className="text-[#49c2ff] font-semibold">Dominios del ecosistema</span>
+										<span className="text-[#4a5f7f]">{domains.active}/{domains.total} activos</span>
+									</div>
+									{(domains.layers || []).map((layer: any, li: number) => (
+										<div key={li}>
+											<h4 className="text-[9px] font-semibold text-[#7f95bb] mb-1 tracking-wider">{layer.name}</h4>
+											{(layer.domains || []).map((d: any, di: number) => (
+												<div key={di} className="flex items-center justify-between text-[10px] py-0.5">
+													<div className="flex items-center gap-1.5">
+														<span className="w-1.5 h-1.5 rounded-full" style={{ background: d.status === "production" ? "#3af08f" : d.status === "dead" ? "#ff4444" : "#ffcc00" }} />
+														<span className="text-[#8ca0c6]">{d.domain}</span>
+													</div>
+													<span className="text-[8px] text-[#4a5f7f]">{d.ssl ? "🔒" : "⚠"}</span>
+												</div>
+											))}
+										</div>
+									))}
+									{domains.repos_pending > 0 && (
+										<p className="text-[9px] text-[#ffcc00] mt-1">{domains.repos_pending} repos listos sin dominio Vercel</p>
+									)}
+									{domains.dead > 0 && (
+										<p className="text-[9px] text-[#ff4444]">{domains.dead} dominios muertos (legacy)</p>
+									)}
+								</div>
+							)}
+							{sideTab === "domains" && !domains && (
+								<div className="py-4">
+									{[1,2,3].map(i => (<div key={i} className="rounded-lg bg-[#0a162855] h-8 mb-1 animate-pulse" />))}
 								</div>
 							)}
 						</aside>
