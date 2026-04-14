@@ -768,7 +768,7 @@ export function AgentHabitat() {
 				</header>
 
 				{/* ── Grid ── */}
-				<div className="grid gap-6" style={{ gridTemplateColumns: showSidebar ? "1fr 320px" : "1fr" }}>
+				<div style={{ width: "100%" }}>
 
 					{/* ── Main content — NO esfera, solo datos ── */}
 					<section className="flex flex-col" style={{ display: "none" }}>
@@ -845,11 +845,8 @@ export function AgentHabitat() {
 						{!isMobile && <p className="text-[9px] text-[#4a5f7f] mt-2">{WS_URLS[wsUrlIdx]?.replace("wss://", "").replace("ws://", "")}</p>}
 					</section>
 
-					{/* ── Events stream (read-only in panel) ── */}
-					<section className={`flex flex-col ${isMobile ? "max-h-[60vh]" : "max-h-[80vh]"}`}>
-						<h2 className="text-xs tracking-[0.18em] text-[#7f95bb] mb-3">STREAM DE EVENTOS</h2>
-
-						{/* Voice / Text Input — HIDDEN in panel (lives in liveodi.com) */}
+					{/* Stream + Input REMOVED — panel is data only, events in tab */}
+					<section style={{ display: "none" }}>
 						{false && phase === "live" && (
 							<div className="mb-3">
 								{inputMode === "voice" ? (
@@ -993,8 +990,8 @@ export function AgentHabitat() {
 					</section>
 
 					{/* ── Sidebar: Flows / Manifest / Stats ── */}
-					{showSidebar && !isMobile && (
-						<aside className="rounded-lg border border-[#1a2a42] bg-[#0a1628] p-3 overflow-y-scroll" style={{ height: "calc(100vh - 120px)", WebkitOverflowScrolling: "touch" }} role="complementary" aria-label="Panel del ecosistema ODI">
+					{true && (
+						<div className="rounded-lg border border-[#1a2a42] bg-[#0a1628] p-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 100px)" }} role="main" aria-label="Panel del ecosistema ODI">
 							{/* Tabs */}
 							<div className="flex gap-1 mb-3">
 								{(["manifest", "events", "domains", "flows", "stats"] as SideTab[]).map((t) => (
@@ -1570,7 +1567,7 @@ export function AgentHabitat() {
 									{[1,2,3].map(i => (<div key={i} className="rounded-lg bg-[#0a162855] h-8 mb-1 animate-pulse" />))}
 								</div>
 							)}
-						</aside>
+						</div>
 					)}
 				</div>
 
