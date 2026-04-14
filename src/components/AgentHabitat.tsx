@@ -156,8 +156,14 @@ export function AgentHabitat() {
 	});
 
 	// ── Domains + Events ──
-	const [domains, setDomains] = useState<any>(null);
-	const [recentEvents, setRecentEvents] = useState<any[]>([]);
+	const [domains, setDomains] = useState<any>(() => {
+		if (typeof window === "undefined") return null;
+		try { const c = localStorage.getItem("odi_cache_domains"); return c ? JSON.parse(c) : null; } catch { return null; }
+	});
+	const [recentEvents, setRecentEvents] = useState<any[]>(() => {
+		if (typeof window === "undefined") return [];
+		try { const c = localStorage.getItem("odi_cache_events"); return c ? JSON.parse(c) : []; } catch { return []; }
+	});
 
 	// ── Stores ──
 	const [stores, setStores] = useState<any[]>(() => {
@@ -585,6 +591,9 @@ export function AgentHabitat() {
 	// === Load domains ===
 	useEffect(() => {
 		cachedFetch(`${AGENT_API}/domains`, "odi_cache_domains", setDomains);
+		// Retry after 5s if null
+		const retry = setTimeout(() => { if (!domains) cachedFetch(`${AGENT_API}/domains`, "odi_cache_domains", setDomains); }, 5000);
+		return () => clearTimeout(retry);
 	}, [cachedFetch]);
 
 	// === Load recent events ===
