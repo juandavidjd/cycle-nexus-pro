@@ -33,12 +33,7 @@ function AppContent() {
 
   switch (skin.layout) {
     case "habitat":
-      return (
-        <Routes>
-          <Route path="/panel" element={<AgentPage />} />
-          <Route path="*" element={<LiveODI />} />
-        </Routes>
-      );
+      return <LiveODI />;
     case "srm":
       return <SRMRoutes />;
     default:
