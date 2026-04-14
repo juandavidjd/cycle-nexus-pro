@@ -768,10 +768,11 @@ export function AgentHabitat() {
 				</header>
 
 				{/* ── Grid ── */}
-				<div className="grid gap-6" style={{ gridTemplateColumns: isMobile ? "1fr" : showSidebar ? "180px 1fr 300px" : "180px 1fr" }}>
+				<div className="grid gap-6" style={{ gridTemplateColumns: showSidebar ? "1fr 320px" : "1fr" }}>
 
-					{/* ── Flame column ── */}
-					<section className={`flex flex-col items-center ${isMobile ? "py-2" : "pt-8"}`}>
+					{/* ── Main content — NO esfera, solo datos ── */}
+					<section className="flex flex-col" style={{ display: "none" }}>
+					{/* Flame column removed — esfera vive en liveodi.com, no en /panel */}
 						<div role="img" aria-label={`ODI estado: ${phase === "live" ? "activo" : phase}`} className={isMobile ? "w-12 h-12 rounded-full" : "w-28 h-28 rounded-full"} style={{
 							background: isSpeaking ? "radial-gradient(circle at 50% 35%, #ec4899 0%, #be185d 40%, #6f6dff 70%, transparent 100%)" : flameGradient[phase],
 							boxShadow: isSpeaking ? "0 0 40px #ec489988, inset 0 0 30px #ec489944" : flameShadow[phase],
@@ -844,12 +845,12 @@ export function AgentHabitat() {
 						{!isMobile && <p className="text-[9px] text-[#4a5f7f] mt-2">{WS_URLS[wsUrlIdx]?.replace("wss://", "").replace("ws://", "")}</p>}
 					</section>
 
-					{/* ── Events + Input + Flow player ── */}
+					{/* ── Events stream (read-only in panel) ── */}
 					<section className={`flex flex-col ${isMobile ? "max-h-[60vh]" : "max-h-[80vh]"}`}>
-						{!isMobile && <h2 className="text-xs tracking-[0.18em] text-[#7f95bb] mb-3">EVENTOS</h2>}
+						<h2 className="text-xs tracking-[0.18em] text-[#7f95bb] mb-3">STREAM DE EVENTOS</h2>
 
-						{/* Voice / Text Input */}
-						{phase === "live" && (
+						{/* Voice / Text Input — HIDDEN in panel (lives in liveodi.com) */}
+						{false && phase === "live" && (
 							<div className="mb-3">
 								{inputMode === "voice" ? (
 									<div className="flex items-center justify-center gap-3 rounded-xl border border-[#35537c] bg-[rgba(7,18,33,0.7)] px-4 py-3">

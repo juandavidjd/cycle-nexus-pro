@@ -273,6 +273,65 @@ export default function LiveODI() {
 		} catch { isPlayingRef.current = false; setIsSpeaking(false); }
 	}, []);
 
+	// STT — continuous speech recognition
+	const recognitionRef = useRef<any>(null);
+	const [isListening, setIsListening] = useState(false);
+	const latestTextRef = useRef("");
+
+	const startListening = useCallback(() => {
+		const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+		if (!SR) return;
+		const rec = new SR();
+		rec.lang = "es-CO";
+		rec.continuous = true;
+		rec.interimResults = true;
+		rec.onresult = (event: any) => {
+			if (isPlayingRef.current) return;
+			const last = event.results[event.results.length - 1];
+			if (!last) return;
+			latestTextRef.current = last[0].transcript.trim();
+		};
+		rec.onend = () => {
+			if (isPlayingRef.current) { setIsListening(false); return; }
+			if (accessMode === "voice") {
+				setTimeout(() => { try { rec.start(); } catch {} }, 500);
+			} else { setIsListening(false); }
+		};
+		rec.onerror = () => {};
+		try { rec.start(); recognitionRef.current = rec; setIsListening(true); } catch {}
+	}, [accessMode]);
+
+	const stopListening = useCallback(() => {
+		try { recognitionRef.current?.stop(); } catch {}
+		recognitionRef.current = null;
+		setIsListening(false);
+	}, []);
+
+	// Auto-send after 2s silence when listening
+	useEffect(() => {
+		if (!isListening || accessMode !== "voice") return;
+		const iv = setInterval(() => {
+			if (latestTextRef.current && !isPlayingRef.current && !isSending) {
+				const text = latestTextRef.current;
+				latestTextRef.current = "";
+				setInput(text);
+				// Trigger send via ref
+				setTimeout(() => {
+					const btn = document.querySelector('[aria-label="Enviar"]') as HTMLButtonElement;
+					if (btn) btn.click();
+				}, 100);
+			}
+		}, 2000);
+		return () => clearInterval(iv);
+	}, [isListening, accessMode, isSending]);
+
+	// Start/stop listening when voice mode changes
+	useEffect(() => {
+		if (phase !== "habitat") return;
+		if (accessMode === "voice" && !isListening) startListening();
+		else if (accessMode !== "voice" && isListening) stopListening();
+	}, [accessMode, phase]);
+
 	// Scroll on new messages
 	useEffect(() => {
 		scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -556,6 +615,18 @@ export default function LiveODI() {
 							disabled={isSending}
 							style={{ flex: 1, background: "transparent", border: "none", color: P.text, fontSize: "0.86rem", outline: "none", fontFamily: "inherit", padding: "10px 0" }}
 						/>
+						{accessMode !== "text" && accessMode !== "signs" && (
+							<button onClick={() => { if (isListening) stopListening(); else startListening(); }}
+								aria-label={isListening ? "Detener microfono" : "Activar microfono"}
+								style={{
+									width: 36, height: 36, borderRadius: 10, marginRight: 4,
+									background: isListening ? `${P.spirit}15` : "transparent",
+									border: `1px solid ${isListening ? P.spirit + "33" : P.border}`,
+									cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+									color: isListening ? P.spirit : P.textDim, fontSize: "0.9rem",
+									animation: isListening ? "pulse 1.5s infinite" : "none",
+								}}>🎙</button>
+						)}
 						<button onClick={send} disabled={!input.trim() || isSending} aria-label="Enviar"
 							style={{
 								width: 36, height: 36, borderRadius: 10,
