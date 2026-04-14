@@ -21,58 +21,44 @@ import LiveODI from "./components/LiveODI";
 
 const queryClient = new QueryClient();
 
-// ─── Detect layout by hostname ───
-function isODIHabitat(): boolean {
-  if (typeof window === "undefined") return false;
-  const h = window.location.hostname.replace(/^www\./, "");
-  return h === "liveodi.com" || h === "localhost";
-}
+// ─── Detect: is this liveodi.com? ───
+const IS_HABITAT = typeof window !== "undefined" &&
+  (window.location.hostname.replace(/^www\./, "") === "liveodi.com" || window.location.hostname === "localhost");
 
-// ─── SRM Routes ───
-function SRMRoutes() {
-  return (
-    <Routes>
-      <Route path="/" element={<Index />} />
-      <Route path="/catalogo" element={<Catalogo />} />
-      <Route path="/clientes" element={<Clientes />} />
-      <Route path="/intelligent" element={<Intelligent />} />
-      <Route path="/academia" element={<Academia />} />
-      <Route path="/academia/modulo/:id" element={<AcademiaModulo />} />
-      <Route path="/auth" element={<Auth />} />
-      <Route path="/:clientId" element={<ClientPage />} />
-      <Route path="*" element={<NotFound />} />
-    </Routes>
-  );
-}
-
-// ─── App Root ───
-const App = () => {
-  const habitat = isODIHabitat();
-
-  return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
+// ─── App ───
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          {IS_HABITAT ? (
             <Routes>
               <Route path="/manager" element={<Manager />} />
               <Route path="/panel" element={<AgentPage />} />
-              {habitat ? (
-                <Route path="*" element={<LiveODI />} />
-              ) : (
-                <>
-                  <Route path="/agent" element={<LiveODI />} />
-                  <Route path="/*" element={<SRMRoutes />} />
-                </>
-              )}
+              <Route path="*" element={<LiveODI />} />
             </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
-      </AuthProvider>
-    </QueryClientProvider>
-  );
-};
+          ) : (
+            <Routes>
+              <Route path="/manager" element={<Manager />} />
+              <Route path="/panel" element={<AgentPage />} />
+              <Route path="/agent" element={<LiveODI />} />
+              <Route path="/" element={<Index />} />
+              <Route path="/catalogo" element={<Catalogo />} />
+              <Route path="/clientes" element={<Clientes />} />
+              <Route path="/intelligent" element={<Intelligent />} />
+              <Route path="/academia" element={<Academia />} />
+              <Route path="/academia/modulo/:id" element={<AcademiaModulo />} />
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/:clientId" element={<ClientPage />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          )}
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
+  </QueryClientProvider>
+);
 
 export default App;
