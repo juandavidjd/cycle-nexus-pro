@@ -1558,7 +1558,13 @@ export function AgentHabitat() {
 														<span className="w-1.5 h-1.5 rounded-full" style={{ background: d.status === "production" ? "#3af08f" : d.status === "dead" ? "#ff4444" : "#ffcc00" }} />
 														<span className="text-[#8ca0c6]">{d.domain}</span>
 													</div>
-													<span className="text-[8px] text-[#4a5f7f]">{d.ssl ? "🔒" : "⚠"}</span>
+													{(() => {
+													if (!d.ssl) return <span className="text-[8px] text-[#ff4444]">⚠ sin SSL</span>;
+													if (!d.ssl_expiry) return <span className="text-[8px] text-[#3af08f]">🔒</span>;
+													const days = Math.floor((new Date(d.ssl_expiry).getTime() - Date.now()) / 86400000);
+													const color = days < 15 ? "#ff4444" : days < 30 ? "#ffcc00" : "#3af08f";
+													return <span className="text-[8px]" style={{ color }}>🔒 {days}d · {new Date(d.ssl_expiry).toLocaleDateString("es-CO", { day: "2-digit", month: "short" })}</span>;
+												})()}
 												</div>
 											))}
 										</div>
