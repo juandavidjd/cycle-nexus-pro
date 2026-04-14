@@ -12,7 +12,8 @@ const IS_HABITAT = typeof window !== "undefined" &&
 // ─── Lazy load: only load what's needed ───
 const LiveODI = lazy(() => import("./components/LiveODI"));
 const AgentPage = lazy(() => import("./pages/AgentHabitat"));
-const Manager = lazy(() => import("./pages/Manager"));
+// Manager unified into /panel — redirect /manager to /panel
+const Manager = lazy(() => import("./pages/AgentHabitat"));
 
 // SRM pages only loaded if NOT habitat
 const Index = lazy(() => import("./pages/Index"));
