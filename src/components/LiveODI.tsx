@@ -209,6 +209,16 @@ export default function LiveODI() {
 	const [isSending, setIsSending] = useState(false);
 	const [orbColor, setOrbColor] = useState(P.glow);
 	const [isSpeaking, setIsSpeaking] = useState(false);
+
+	// Referral system
+	const [referrer, setReferrer] = useState<string | null>(null);
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		const params = new URLSearchParams(window.location.search);
+		const ref = params.get("ref");
+		if (ref) { setReferrer(ref); localStorage.setItem("odi_referrer", ref); }
+		else { const saved = localStorage.getItem("odi_referrer"); if (saved) setReferrer(saved); }
+	}, []);
 	const [ephemeral, setEphemeral] = useState<EphemeralData | null>(null);
 	const [ephProducts, setEphProducts] = useState<any[]>([]);
 	const [accessMode, setAccessMode] = useState<string>(() => {
@@ -263,14 +273,25 @@ export default function LiveODI() {
 			if (cancelled) return;
 			setMsgs([{ role: "odi", text: "Hola. Estoy aquí.", voice: "ramona", mode: "presence" }]);
 			setOrbColor(P.spirit);
-			await new Promise(r => setTimeout(r, 1500));
+			// Speak greeting if audio mode
+			if (accessMode !== "text" && accessMode !== "signs") {
+				speak("Hola. Estoy aquí.", "ramona");
+			}
+			await new Promise(r => setTimeout(r, 2000));
+			if (cancelled) return;
+			// ODI follows up proactively
+			setMsgs(prev => [...prev, { role: "odi", text: "¿Cómo estás?", voice: "ramona", mode: "presence" }]);
+			if (accessMode !== "text" && accessMode !== "signs") {
+				speak("¿Cómo estás?", "ramona");
+			}
+			await new Promise(r => setTimeout(r, 1000));
 			if (cancelled) return;
 			setPhase("habitat");
 			setTimeout(() => inputRef.current?.focus(), 100);
 		};
 		seq();
 		return () => { cancelled = true; };
-	}, [phase]);
+	}, [phase, accessMode, speak]);
 
 	// TTS
 	const speak = useCallback(async (text: string, voice: string = "ramona") => {
@@ -377,9 +398,22 @@ export default function LiveODI() {
 							))}
 						</div>
 					)}
+					{phase === "habitat" && (
+						<button onClick={() => {
+							const name = prompt("Tu nombre (para la recomendacion):");
+							if (name) {
+								const url = `https://liveodi.com?ref=${encodeURIComponent(name)}`;
+								if (navigator.share) { navigator.share({ title: "ODI", text: `${name} te recomienda ODI`, url }); }
+								else { navigator.clipboard.writeText(url); alert("Link copiado: " + url); }
+							}
+						}} aria-label="Compartir ODI"
+							style={{ background: "transparent", border: `1px solid ${P.border}`, borderRadius: 8, padding: "4px 8px", color: P.textDim, fontSize: "0.58rem", cursor: "pointer", fontFamily: "inherit" }}>
+							↗
+						</button>
+					)}
 					<button onClick={() => setA11yOpen(!a11yOpen)} aria-label="Opciones de accesibilidad"
 						style={{ background: "transparent", border: `1px solid ${P.border}`, borderRadius: 8, padding: "4px 10px", color: P.textDim, fontSize: "0.58rem", cursor: "pointer", fontFamily: "inherit" }}>
-						♿ Adaptarme
+						♿
 					</button>
 				</div>
 			</header>
@@ -426,7 +460,7 @@ export default function LiveODI() {
 							background: `radial-gradient(circle at 48% 38%, ${orbColor}dd 0%, ${orbColor}88 28%, ${orbColor}44 52%, ${orbColor}11 75%, transparent 100%)`,
 							boxShadow: `0 0 52px ${orbColor}44, inset 0 0 45px ${orbColor}22`,
 							border: "none", cursor: "pointer",
-							animation: isSpeaking ? "orbSpeak 1.5s ease-in-out infinite" : "orbBreathe 5s ease-in-out infinite",
+							animation: isSpeaking ? "orbSpeak 1.2s ease-in-out infinite" : phase === "landing" ? "orbLanding 3s ease-in-out infinite" : isSending ? "orbSpeak 2s ease-in-out infinite" : "orbBreathe 4s ease-in-out infinite",
 							transition: "background 1.5s ease, box-shadow 1.5s ease",
 						}}
 					/>
@@ -438,11 +472,28 @@ export default function LiveODI() {
 						<p style={{ margin: 0, fontSize: "0.68rem", color: P.textSoft, fontWeight: 400, letterSpacing: "0.04em" }}>
 							Organismo Digital Industrial
 						</p>
+						{referrer && (
+							<p style={{ margin: "8px 0 0", fontSize: "0.56rem", color: P.warm, fontWeight: 400, animation: "fadeIn 1.5s ease" }}>
+								Recomendado por {referrer}
+							</p>
+						)}
 						<div style={{ marginTop: 32, display: "flex", gap: 16, justifyContent: "center", animation: "fadeIn 2.5s ease" }}>
-							{["🎙 Voz", "⌨ Texto", "🤟 Señas"].map((h, i) => (
-								<button key={i} onClick={() => setPhase("awakening")}
-									style={{ background: "transparent", border: "none", color: P.textDim, fontSize: "0.6rem", cursor: "pointer", fontFamily: "inherit", padding: "8px 12px", transition: "color 0.3s" }}>
-									{h}
+							{[
+								{ icon: "🎙", label: "Voz", mode: "voice" as const },
+								{ icon: "⌨", label: "Texto", mode: "text" as const },
+								{ icon: "🤟", label: "Señas", mode: "signs" as const },
+							].map(door => (
+								<button key={door.mode} onClick={() => {
+									if (door.mode === "signs") { setAccessMode("signs"); localStorage.setItem("odi_a11y_mode", "signs"); }
+									else if (door.mode === "voice") { setAccessMode("voice"); localStorage.setItem("odi_a11y_mode", "voice"); }
+									setPhase("awakening");
+								}}
+									style={{ background: "transparent", border: `1px solid ${P.border}`, borderRadius: 12, color: P.textDim, fontSize: "0.65rem", cursor: "pointer", fontFamily: "inherit", padding: "12px 18px", transition: "all 0.3s", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}
+									onMouseEnter={e => { (e.target as HTMLElement).style.borderColor = P.glow + "55"; (e.target as HTMLElement).style.color = P.textSoft; }}
+									onMouseLeave={e => { (e.target as HTMLElement).style.borderColor = P.border; (e.target as HTMLElement).style.color = P.textDim; }}
+								>
+									<span style={{ fontSize: "1.3rem" }}>{door.icon}</span>
+									{door.label}
 								</button>
 							))}
 						</div>
@@ -520,8 +571,9 @@ export default function LiveODI() {
 			)}
 
 			<style>{`
-				@keyframes orbBreathe { 0%,100%{transform:scale(1);filter:brightness(1)}40%{transform:scale(1.05);filter:brightness(1.12)}70%{transform:scale(0.98);filter:brightness(0.95)} }
-				@keyframes orbSpeak { 0%,100%{transform:scale(1);filter:brightness(1.1)}50%{transform:scale(1.12);filter:brightness(1.25)} }
+				@keyframes orbBreathe { 0%{transform:translateY(0) scale(1);filter:brightness(1)} 25%{transform:translateY(-8px) scale(1.04);filter:brightness(1.08)} 50%{transform:translateY(-2px) scale(1.02);filter:brightness(1.12)} 75%{transform:translateY(-6px) scale(0.98);filter:brightness(0.97)} 100%{transform:translateY(0) scale(1);filter:brightness(1)} }
+				@keyframes orbSpeak { 0%{transform:translateY(0) scale(1);filter:brightness(1.1)} 25%{transform:translateY(-12px) scale(1.15);filter:brightness(1.3)} 50%{transform:translateY(-4px) scale(1.08);filter:brightness(1.15)} 75%{transform:translateY(-10px) scale(1.12);filter:brightness(1.25)} 100%{transform:translateY(0) scale(1);filter:brightness(1.1)} }
+					@keyframes orbLanding { 0%{transform:translateY(0) scale(1)} 33%{transform:translateY(-15px) scale(1.06)} 66%{transform:translateY(-5px) scale(1.03)} 100%{transform:translateY(0) scale(1)} }
 				@keyframes fadeIn { from{opacity:0}to{opacity:1} }
 			@keyframes fadeOut { from{opacity:1}to{opacity:0} }
 				@keyframes msgIn { from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)} }
