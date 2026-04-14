@@ -332,6 +332,13 @@ export default function LiveODI() {
 		else if (accessMode !== "voice" && isListening) stopListening();
 	}, [accessMode, phase]);
 
+	// VLibras toggle — show/hide widget based on signs mode
+	useEffect(() => {
+		const widget = document.getElementById("vlibras-widget");
+		if (!widget) return;
+		widget.style.display = accessMode === "signs" ? "block" : "none";
+	}, [accessMode]);
+
 	// Scroll on new messages
 	useEffect(() => {
 		scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });

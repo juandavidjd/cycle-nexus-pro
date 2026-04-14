@@ -36,6 +36,14 @@
 
   <body>
     <div id="root"></div>
+    <!-- VLibras — Lengua de señas (activado por modo Señas en Adaptarme) -->
+    <div vw class="enabled" id="vlibras-widget" style="display:none">
+      <div vw-access-button class="active"></div>
+      <div vw-plugin-wrapper><div class="vw-plugin-top-wrapper"></div></div>
+    </div>
+    <script src="https://vlibras.gov.br/app/vlibras-plugin.js"></script>
+    <script>new window.VLibras.Widget('https://vlibras.gov.br/app');</script>
+    <style>#vlibras-widget [vw-access-button]{bottom:80px!important;right:16px!important;z-index:200!important}</style>
     <script type="module" src="/src/main.tsx"></script>
     <script>
       if ('serviceWorker' in navigator) {
