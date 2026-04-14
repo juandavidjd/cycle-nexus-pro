@@ -4,9 +4,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
-import { SkinProvider, useSkin } from "@/context/SkinProvider";
 
-// ─── SRM Pages (somosrepuestosmotos.com) ───
+// ─── SRM Pages ───
 import Index from "./pages/Index";
 import Catalogo from "./pages/Catalogo";
 import Clientes from "./pages/Clientes";
@@ -18,31 +17,18 @@ import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import Manager from "./pages/Manager";
 import AgentPage from "./pages/AgentHabitat";
-import LiveODIPage from "./pages/LiveODIPage";
 import LiveODI from "./components/LiveODI";
-
-// ─── Habitat (liveodi.com) ───
-import HabitatLayout from "./components/habitat/HabitatLayout";
 
 const queryClient = new QueryClient();
 
-// ─── Layout Router: hostname → layout ───
-
-function AppContent() {
-  const skin = useSkin();
-
-  switch (skin.layout) {
-    case "habitat":
-      return <LiveODI />;
-    case "srm":
-      return <SRMRoutes />;
-    default:
-      return <LiveODI />;
-  }
+// ─── Detect layout by hostname ───
+function isODIHabitat(): boolean {
+  if (typeof window === "undefined") return false;
+  const h = window.location.hostname.replace(/^www\./, "");
+  return h === "liveodi.com" || h === "localhost";
 }
 
-// ─── SRM Routes (cycle-nexus-pro actual) ───
-
+// ─── SRM Routes ───
 function SRMRoutes() {
   return (
     <Routes>
@@ -60,27 +46,33 @@ function SRMRoutes() {
 }
 
 // ─── App Root ───
+const App = () => {
+  const habitat = isODIHabitat();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <SkinProvider>
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
           <BrowserRouter>
             <Routes>
               <Route path="/manager" element={<Manager />} />
-              <Route path="/agent" element={<LiveODIPage />} />
               <Route path="/panel" element={<AgentPage />} />
-              <Route path="*" element={<AppContent />} />
+              {habitat ? (
+                <Route path="*" element={<LiveODI />} />
+              ) : (
+                <>
+                  <Route path="/agent" element={<LiveODI />} />
+                  <Route path="/*" element={<SRMRoutes />} />
+                </>
+              )}
             </Routes>
           </BrowserRouter>
-        </SkinProvider>
-      </TooltipProvider>
-    </AuthProvider>
-  </QueryClientProvider>
-);
+        </TooltipProvider>
+      </AuthProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;
-
