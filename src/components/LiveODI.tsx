@@ -203,7 +203,7 @@ function EphemeralWindow({ ephemeral, products, onDismiss }: { ephemeral: Epheme
 }
 
 export default function LiveODI() {
-	const [phase, setPhase] = useState<"landing" | "awakening" | "habitat">("awakening");
+	const [phase, setPhase] = useState<"landing" | "awakening" | "habitat">("landing");
 	const [msgs, setMsgs] = useState<Msg[]>([]);
 	const [input, setInput] = useState("");
 	const [isSending, setIsSending] = useState(false);
@@ -421,6 +421,20 @@ export default function LiveODI() {
 	// Wire sendRef for STT
 	useEffect(() => { sendRef.current = sendText; }, [sendText]);
 
+	// Safety: force reset isSending after 15s
+	useEffect(() => {
+		if (!isSending) return;
+		const t = setTimeout(() => setIsSending(false), 15000);
+		return () => clearTimeout(t);
+	}, [isSending]);
+
+	// Safety: force reset isPlaying after 30s
+	useEffect(() => {
+		if (!isSpeaking) return;
+		const t = setTimeout(() => { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); }, 30000);
+		return () => clearTimeout(t);
+	}, [isSpeaking]);
+
 	const send = useCallback(async () => {
 		const text = input.trim();
 		if (!text || isSending) return;
@@ -494,7 +508,9 @@ export default function LiveODI() {
 					<span aria-label="Organismo activo" style={{ width: 6, height: 6, borderRadius: "50%", background: P.alive, boxShadow: `0 0 8px ${P.alive}44` }} />
 				</div>
 				<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-					{isSpeaking && <span style={{ fontSize: "0.5rem", color: P.spirit, animation: "fadeIn 0.3s" }}>hablando...</span>}
+					<span style={{ fontSize: "0.45rem", color: isSpeaking ? P.spirit : isListening ? P.alive : isSending ? P.warm : P.textFaint }}>
+					{isSpeaking ? "hablando..." : isListening ? "escuchando..." : isSending ? "pensando..." : "inactivo"}
+				</span>
 					{/* Registration dots */}
 					{phase === "habitat" && (
 						<div style={{ display: "flex", gap: 3 }} title="Registro: voz · rostro · santo y sena" aria-label={`Registro: ${[regState.voice && "voz", regState.photo && "rostro", regState.santo && "santo y sena"].filter(Boolean).join(", ") || "pendiente"}`}>
