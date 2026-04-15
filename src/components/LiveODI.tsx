@@ -265,8 +265,8 @@ export default function LiveODI() {
 				const url = URL.createObjectURL(blob);
 				const audio = audioRef.current || new Audio();
 				audioRef.current = audio;
-				audio.onended = () => { isPlayingRef.current = false; setIsSpeaking(false); URL.revokeObjectURL(url); };
-				audio.onerror = () => { isPlayingRef.current = false; setIsSpeaking(false); };
+				audio.onended = () => { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); URL.revokeObjectURL(url); };
+				audio.onerror = () => { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); };
 				audio.src = url;
 				await audio.play();
 			} else { isPlayingRef.current = false; setIsSpeaking(false); }
@@ -278,6 +278,8 @@ export default function LiveODI() {
 	const [isListening, setIsListening] = useState(false);
 	const silenceTimerRef = useRef<any>(null);
 	const sendRef = useRef<(text: string) => void>();
+	const lastOdiTextRef = useRef("");
+	const ttsEndTimeRef = useRef(0);
 
 	const startListening = useCallback(() => {
 		const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -289,27 +291,35 @@ export default function LiveODI() {
 		rec.interimResults = true;
 		let lastFinal = "";
 		rec.onresult = (event: any) => {
-			if (isPlayingRef.current) return;
+			// Hard mute during TTS + 1.5s cooldown after TTS ends
+			if (isPlayingRef.current || Date.now() - ttsEndTimeRef.current < 1500) return;
 			const last = event.results[event.results.length - 1];
 			if (!last) return;
 			if (last.isFinal) lastFinal = last[0].transcript.trim();
-			// Reset silence timer
 			if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
 			silenceTimerRef.current = setTimeout(() => {
-				if (lastFinal && !isPlayingRef.current && sendRef.current) {
-					sendRef.current(lastFinal);
-					lastFinal = "";
-					// Stop and restart to clear results
-					try { rec.stop(); } catch {}
+				if (!lastFinal || isPlayingRef.current) return;
+				// Anti-echo: reject if >50% overlap with last ODI response
+				const clean = lastFinal.toLowerCase().replace(/[^a-záéíóúñü\s]/gi, "");
+				const odiClean = lastOdiTextRef.current.toLowerCase().replace(/[^a-záéíóúñü\s]/gi, "");
+				if (odiClean && clean.length > 5) {
+					const words = clean.split(/\s+/);
+					const odiWords = odiClean.split(/\s+/);
+					const overlap = words.filter(w => odiWords.includes(w)).length;
+					if (overlap / Math.max(words.length, 1) > 0.5) { lastFinal = ""; return; }
 				}
+				if (sendRef.current) sendRef.current(lastFinal);
+				lastFinal = "";
+				try { rec.stop(); } catch {}
 			}, 1800);
 		};
 		rec.onend = () => {
 			if (isPlayingRef.current) { setIsListening(false); return; }
-			// Restart after 800ms
+			// Wait 1.5s after TTS before restarting
+			const wait = Math.max(0, 1500 - (Date.now() - ttsEndTimeRef.current));
 			setTimeout(() => {
 				if (!isPlayingRef.current) { try { rec.start(); } catch {} }
-			}, 800);
+			}, Math.max(wait, 800));
 		};
 		rec.onerror = () => {};
 		try { rec.start(); recognitionRef.current = rec; setIsListening(true); } catch {}
@@ -402,6 +412,7 @@ export default function LiveODI() {
 				})).filter((p: any) => p.title);
 				setOrbColor(voice === "tony" ? P.glow : P.spirit);
 				setMsgs(prev => [...prev, { role: "odi", text: responseText, voice, mode, products: products.length > 0 ? products : undefined }]);
+				lastOdiTextRef.current = responseText;
 				const visual = data.visual;
 				if (visual && visual.type) { setEphProducts(data.productos || []); setEphemeral(visual); }
 				if (accessMode !== "text" && accessMode !== "signs") { speak(responseText, voice); }
@@ -442,6 +453,7 @@ export default function LiveODI() {
 
 				setOrbColor(voice === "tony" ? P.glow : P.spirit);
 				setMsgs(prev => [...prev, { role: "odi", text: responseText, voice, mode, products: products.length > 0 ? products : undefined }]);
+				lastOdiTextRef.current = responseText;
 
 				// Ephemeral window from visual contract
 				const visual = data.visual;
