@@ -323,8 +323,8 @@ export default function LiveODI() {
 			// Wait 1.5s after TTS before restarting
 			const wait = Math.max(0, 1500 - (Date.now() - ttsEndTimeRef.current));
 			setTimeout(() => {
-				if (!isPlayingRef.current) { try { rec.start(); } catch {} }
-			}, Math.max(wait, 800));
+				if (!isPlayingRef.current && document.visibilityState !== "hidden") { try { rec.start(); setIsListening(true); } catch {} }
+			}, Math.max(wait, 2000));
 		};
 		rec.onerror = () => {};
 		try { rec.start(); recognitionRef.current = rec; setIsListening(true); } catch {}
