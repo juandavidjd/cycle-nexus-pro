@@ -278,15 +278,15 @@ export default function LiveODI() {
 		}).catch(() => { clearTimeout(timeout); isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); });
 	}, []);
 
-	// STT — simple one-shot recognition, auto-restart
+	// STT — tap mic to talk, release to send. No auto-restart, no loops, no chimes.
 	const recognitionRef = useRef<any>(null);
 	const [isListening, setIsListening] = useState(false);
 	const sendRef = useRef<(text: string) => void>();
 	const lastOdiTextRef = useRef("");
 	const ttsEndTimeRef = useRef(0);
 
-	const listen = useCallback(() => {
-		if (isPlayingRef.current) return;
+	const tapToListen = useCallback(() => {
+		if (isPlayingRef.current || isListening) return;
 		const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 		if (!SR) return;
 		const rec = new SR();
@@ -296,43 +296,12 @@ export default function LiveODI() {
 		rec.onresult = (event: any) => {
 			const text = event.results[0]?.[0]?.transcript?.trim();
 			if (!text || text.length < 2) return;
-			// Anti-echo: reject if too similar to last ODI response
-			if (lastOdiTextRef.current) {
-				const tw = text.toLowerCase().split(/\s+/);
-				const ow = lastOdiTextRef.current.toLowerCase().split(/\s+/);
-				const overlap = tw.filter(w => ow.includes(w)).length;
-				if (overlap / Math.max(tw.length, 1) > 0.5) return;
-			}
 			if (sendRef.current) sendRef.current(text);
 		};
-		rec.onend = () => {
-			// Auto-restart after a pause (only if not speaking)
-			if (!isPlayingRef.current && document.visibilityState !== "hidden") {
-				const delay = Date.now() - ttsEndTimeRef.current < 2000 ? 2000 : 500;
-				setTimeout(() => listen(), delay);
-			}
-		};
-		rec.onerror = (e: any) => {
-			if (e.error === "no-speech" || e.error === "aborted") {
-				// Normal — just restart
-				setTimeout(() => listen(), 1000);
-			}
-		};
-		try { rec.start(); recognitionRef.current = rec; setIsListening(true); } catch {}
-	}, []);
-
-	const stopListening = useCallback(() => {
-		try { recognitionRef.current?.abort(); } catch {}
-		recognitionRef.current = null;
-		setIsListening(false);
-	}, []);
-
-	// Start listening when entering habitat in voice mode
-	useEffect(() => {
-		if (phase !== "habitat") return;
-		if (accessMode === "voice") { setTimeout(() => listen(), 1000); }
-		return () => stopListening();
-	}, [accessMode, phase]);
+		rec.onend = () => setIsListening(false);
+		rec.onerror = () => setIsListening(false);
+		try { rec.start(); recognitionRef.current = rec; setIsListening(true); } catch { setIsListening(false); }
+	}, [isListening]);
 
 	// VLibras toggle — show/hide widget based on signs mode
 	useEffect(() => {
@@ -360,25 +329,10 @@ export default function LiveODI() {
 		if (phase !== "awakening") return;
 		let cancelled = false;
 		const seq = async () => {
-			await new Promise(r => setTimeout(r, 1200));
+			await new Promise(r => setTimeout(r, 800));
 			if (cancelled) return;
-			setMsgs([{ role: "odi", text: "Hola. Estoy aquí.", voice: "ramona", mode: "presence" }]);
 			setOrbColor(P.spirit);
-			// Speak greeting if audio mode
-			if (accessMode !== "text" && accessMode !== "signs") {
-				speak("Hola. Estoy aquí.", "ramona");
-			}
-			await new Promise(r => setTimeout(r, 2000));
-			if (cancelled) return;
-			// ODI follows up proactively
-			setMsgs(prev => [...prev, { role: "odi", text: "¿Cómo estás?", voice: "ramona", mode: "presence" }]);
-			if (accessMode !== "text" && accessMode !== "signs") {
-				speak("¿Cómo estás?", "ramona");
-			}
-			await new Promise(r => setTimeout(r, 1000));
-			if (cancelled) return;
 			setPhase("habitat");
-			setTimeout(() => inputRef.current?.focus(), 100);
 		};
 		seq();
 		return () => { cancelled = true; };
@@ -574,7 +528,7 @@ export default function LiveODI() {
 					marginBottom: hasConvo ? -16 : 20,
 					marginTop: hasConvo ? 4 : 0,
 				}}>
-					<button onClick={() => { if (phase === "landing") setPhase("awakening"); else if (phase === "habitat") inputRef.current?.focus(); }}
+					<button onClick={() => { if (phase === "landing") setPhase("awakening"); else if (phase === "habitat") { if (accessMode === "voice") tapToListen(); else inputRef.current?.focus(); } }}
 						aria-label="ODI" tabIndex={0}
 						style={{
 							width: 150, height: 150, borderRadius: "50%",
@@ -678,8 +632,8 @@ export default function LiveODI() {
 							style={{ flex: 1, background: "transparent", border: "none", color: P.text, fontSize: "0.86rem", outline: "none", fontFamily: "inherit", padding: "10px 0" }}
 						/>
 						{accessMode !== "text" && accessMode !== "signs" && (
-							<button onClick={() => { if (isListening) stopListening(); else startListening(); }}
-								aria-label={isListening ? "Detener microfono" : "Activar microfono"}
+							<button onClick={tapToListen}
+								aria-label={isListening ? "Escuchando..." : "Toca para hablar"}
 								style={{
 									width: 36, height: 36, borderRadius: 10, marginRight: 4,
 									background: isListening ? `${P.spirit}15` : "transparent",
