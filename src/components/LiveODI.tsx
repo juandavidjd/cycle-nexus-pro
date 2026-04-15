@@ -203,7 +203,7 @@ function EphemeralWindow({ ephemeral, products, onDismiss }: { ephemeral: Epheme
 }
 
 export default function LiveODI() {
-	const [phase, setPhase] = useState<"landing" | "awakening" | "habitat">("landing");
+	const [phase, setPhase] = useState<"landing" | "awakening" | "habitat">("awakening");
 	const [msgs, setMsgs] = useState<Msg[]>([]);
 	const [input, setInput] = useState("");
 	const [isSending, setIsSending] = useState(false);
@@ -222,8 +222,8 @@ export default function LiveODI() {
 	const [ephemeral, setEphemeral] = useState<EphemeralData | null>(null);
 	const [ephProducts, setEphProducts] = useState<any[]>([]);
 	const [accessMode, setAccessMode] = useState<string>(() => {
-		if (typeof window === "undefined") return "normal";
-		return localStorage.getItem("odi_a11y_mode") || "normal";
+		if (typeof window === "undefined") return "voice";
+		return localStorage.getItem("odi_a11y_mode") || "voice";
 	});
 	const [a11yOpen, setA11yOpen] = useState(false);
 	const fontSize = accessMode === "large" ? 1.25 : 1;
@@ -251,26 +251,31 @@ export default function LiveODI() {
 	const hasConvo = msgs.length > 0 && phase === "habitat";
 
 	// TTS — declared early so useEffects can reference it
-	const speak = useCallback(async (text: string, voice: string = "ramona") => {
+	const speak = useCallback((text: string, voice: string = "ramona") => {
 		if (isPlayingRef.current || !text) return;
-		try {
-			isPlayingRef.current = true;
-			setIsSpeaking(true);
-			const resp = await fetch(SPEAK_URL, {
-				method: "POST", headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ text: text.slice(0, 500), voice }),
-			});
-			if (resp.ok) {
-				const blob = await resp.blob();
-				const url = URL.createObjectURL(blob);
-				const audio = audioRef.current || new Audio();
-				audioRef.current = audio;
-				audio.onended = () => { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); URL.revokeObjectURL(url); };
-				audio.onerror = () => { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); };
-				audio.src = url;
-				await audio.play();
-			} else { isPlayingRef.current = false; setIsSpeaking(false); }
-		} catch { isPlayingRef.current = false; setIsSpeaking(false); }
+		// Stop STT while speaking
+		try { recognitionRef.current?.stop(); } catch {}
+		isPlayingRef.current = true;
+		setIsSpeaking(true);
+		lastOdiTextRef.current = text;
+		// Non-blocking fetch with 8s timeout
+		const ctrl = new AbortController();
+		const timeout = setTimeout(() => ctrl.abort(), 8000);
+		fetch(SPEAK_URL, {
+			method: "POST", headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ text: text.slice(0, 300), voice }),
+			signal: ctrl.signal,
+		}).then(r => { clearTimeout(timeout); return r.ok ? r.blob() : null; })
+		.then(blob => {
+			if (!blob) { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); return; }
+			const url = URL.createObjectURL(blob);
+			const audio = audioRef.current || new Audio();
+			audioRef.current = audio;
+			audio.onended = () => { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); URL.revokeObjectURL(url); };
+			audio.onerror = () => { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); };
+			audio.src = url;
+			audio.play().catch(() => { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); });
+		}).catch(() => { clearTimeout(timeout); isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); });
 	}, []);
 
 	// STT — continuous speech recognition with silence detection
