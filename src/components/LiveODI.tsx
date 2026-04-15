@@ -273,57 +273,54 @@ export default function LiveODI() {
 		} catch { isPlayingRef.current = false; setIsSpeaking(false); }
 	}, []);
 
-	// STT — continuous speech recognition
+	// STT — continuous speech recognition with silence detection
 	const recognitionRef = useRef<any>(null);
 	const [isListening, setIsListening] = useState(false);
-	const latestTextRef = useRef("");
+	const silenceTimerRef = useRef<any>(null);
+	const sendRef = useRef<(text: string) => void>();
 
 	const startListening = useCallback(() => {
 		const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 		if (!SR) return;
+		if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch {} }
 		const rec = new SR();
 		rec.lang = "es-CO";
 		rec.continuous = true;
 		rec.interimResults = true;
+		let lastFinal = "";
 		rec.onresult = (event: any) => {
 			if (isPlayingRef.current) return;
 			const last = event.results[event.results.length - 1];
 			if (!last) return;
-			latestTextRef.current = last[0].transcript.trim();
+			if (last.isFinal) lastFinal = last[0].transcript.trim();
+			// Reset silence timer
+			if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+			silenceTimerRef.current = setTimeout(() => {
+				if (lastFinal && !isPlayingRef.current && sendRef.current) {
+					sendRef.current(lastFinal);
+					lastFinal = "";
+					// Stop and restart to clear results
+					try { rec.stop(); } catch {}
+				}
+			}, 1800);
 		};
 		rec.onend = () => {
 			if (isPlayingRef.current) { setIsListening(false); return; }
-			if (accessMode === "voice") {
-				setTimeout(() => { try { rec.start(); } catch {} }, 500);
-			} else { setIsListening(false); }
+			// Restart after 800ms
+			setTimeout(() => {
+				if (!isPlayingRef.current) { try { rec.start(); } catch {} }
+			}, 800);
 		};
 		rec.onerror = () => {};
 		try { rec.start(); recognitionRef.current = rec; setIsListening(true); } catch {}
-	}, [accessMode]);
+	}, []);
 
 	const stopListening = useCallback(() => {
+		if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
 		try { recognitionRef.current?.stop(); } catch {}
 		recognitionRef.current = null;
 		setIsListening(false);
 	}, []);
-
-	// Auto-send after 2s silence when listening
-	useEffect(() => {
-		if (!isListening || accessMode !== "voice") return;
-		const iv = setInterval(() => {
-			if (latestTextRef.current && !isPlayingRef.current && !isSending) {
-				const text = latestTextRef.current;
-				latestTextRef.current = "";
-				setInput(text);
-				// Trigger send via ref
-				setTimeout(() => {
-					const btn = document.querySelector('[aria-label="Enviar"]') as HTMLButtonElement;
-					if (btn) btn.click();
-				}, 100);
-			}
-		}, 2000);
-		return () => clearInterval(iv);
-	}, [isListening, accessMode, isSending]);
 
 	// Start/stop listening when voice mode changes
 	useEffect(() => {
@@ -383,6 +380,41 @@ export default function LiveODI() {
 	}, [phase, accessMode, speak]);
 
 	// Send message to Chat API
+	const sendText = useCallback(async (voiceText: string) => {
+		if (!voiceText || isSending) return;
+		setIsSending(true);
+		turnRef.current++;
+		setMsgs(prev => [...prev, { role: "user", text: voiceText }]);
+		try {
+			const resp = await fetch(CHAT_URL, {
+				method: "POST", headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ message: voiceText, session_id: sessionRef.current, mode: "commerce" }),
+			});
+			if (resp.ok) {
+				const data = await resp.json();
+				const responseText = data.response || "";
+				const voice = data.voice || "ramona";
+				const mode = data.mode || "presence";
+				const products = (data.productos || []).map((p: any) => ({
+					title: p.title || p.titulo || "",
+					price: parseFloat(p.price || p.precio || 0),
+					from: p.from || p.tienda || "",
+				})).filter((p: any) => p.title);
+				setOrbColor(voice === "tony" ? P.glow : P.spirit);
+				setMsgs(prev => [...prev, { role: "odi", text: responseText, voice, mode, products: products.length > 0 ? products : undefined }]);
+				const visual = data.visual;
+				if (visual && visual.type) { setEphProducts(data.productos || []); setEphemeral(visual); }
+				if (accessMode !== "text" && accessMode !== "signs") { speak(responseText, voice); }
+			}
+		} catch {
+			setMsgs(prev => [...prev, { role: "odi", text: "No pude conectar. Intenta de nuevo.", voice: "ramona", mode: "care" }]);
+		}
+		setIsSending(false);
+	}, [isSending, speak, accessMode]);
+
+	// Wire sendRef for STT
+	useEffect(() => { sendRef.current = sendText; }, [sendText]);
+
 	const send = useCallback(async () => {
 		const text = input.trim();
 		if (!text || isSending) return;
