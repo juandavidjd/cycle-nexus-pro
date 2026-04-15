@@ -278,70 +278,60 @@ export default function LiveODI() {
 		}).catch(() => { clearTimeout(timeout); isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); });
 	}, []);
 
-	// STT — continuous speech recognition with silence detection
+	// STT — simple one-shot recognition, auto-restart
 	const recognitionRef = useRef<any>(null);
 	const [isListening, setIsListening] = useState(false);
-	const silenceTimerRef = useRef<any>(null);
 	const sendRef = useRef<(text: string) => void>();
 	const lastOdiTextRef = useRef("");
 	const ttsEndTimeRef = useRef(0);
 
-	const startListening = useCallback(() => {
+	const listen = useCallback(() => {
+		if (isPlayingRef.current) return;
 		const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 		if (!SR) return;
-		if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch {} }
 		const rec = new SR();
 		rec.lang = "es-CO";
-		rec.continuous = true;
-		rec.interimResults = true;
-		let lastFinal = "";
+		rec.continuous = false;
+		rec.interimResults = false;
 		rec.onresult = (event: any) => {
-			// Hard mute during TTS + 1.5s cooldown after TTS ends
-			if (isPlayingRef.current || Date.now() - ttsEndTimeRef.current < 1500) return;
-			const last = event.results[event.results.length - 1];
-			if (!last) return;
-			if (last.isFinal) lastFinal = last[0].transcript.trim();
-			if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-			silenceTimerRef.current = setTimeout(() => {
-				if (!lastFinal || isPlayingRef.current) return;
-				// Anti-echo: reject if >50% overlap with last ODI response
-				const clean = lastFinal.toLowerCase().replace(/[^a-záéíóúñü\s]/gi, "");
-				const odiClean = lastOdiTextRef.current.toLowerCase().replace(/[^a-záéíóúñü\s]/gi, "");
-				if (odiClean && clean.length > 5) {
-					const words = clean.split(/\s+/);
-					const odiWords = odiClean.split(/\s+/);
-					const overlap = words.filter(w => odiWords.includes(w)).length;
-					if (overlap / Math.max(words.length, 1) > 0.5) { lastFinal = ""; return; }
-				}
-				if (sendRef.current) sendRef.current(lastFinal);
-				lastFinal = "";
-				try { rec.stop(); } catch {}
-			}, 1800);
+			const text = event.results[0]?.[0]?.transcript?.trim();
+			if (!text || text.length < 2) return;
+			// Anti-echo: reject if too similar to last ODI response
+			if (lastOdiTextRef.current) {
+				const tw = text.toLowerCase().split(/\s+/);
+				const ow = lastOdiTextRef.current.toLowerCase().split(/\s+/);
+				const overlap = tw.filter(w => ow.includes(w)).length;
+				if (overlap / Math.max(tw.length, 1) > 0.5) return;
+			}
+			if (sendRef.current) sendRef.current(text);
 		};
 		rec.onend = () => {
-			if (isPlayingRef.current) { setIsListening(false); return; }
-			// Wait 1.5s after TTS before restarting
-			const wait = Math.max(0, 1500 - (Date.now() - ttsEndTimeRef.current));
-			setTimeout(() => {
-				if (!isPlayingRef.current && document.visibilityState !== "hidden") { try { rec.start(); setIsListening(true); } catch {} }
-			}, Math.max(wait, 2000));
+			// Auto-restart after a pause (only if not speaking)
+			if (!isPlayingRef.current && document.visibilityState !== "hidden") {
+				const delay = Date.now() - ttsEndTimeRef.current < 2000 ? 2000 : 500;
+				setTimeout(() => listen(), delay);
+			}
 		};
-		rec.onerror = () => {};
+		rec.onerror = (e: any) => {
+			if (e.error === "no-speech" || e.error === "aborted") {
+				// Normal — just restart
+				setTimeout(() => listen(), 1000);
+			}
+		};
 		try { rec.start(); recognitionRef.current = rec; setIsListening(true); } catch {}
 	}, []);
 
 	const stopListening = useCallback(() => {
-		if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-		try { recognitionRef.current?.stop(); } catch {}
+		try { recognitionRef.current?.abort(); } catch {}
 		recognitionRef.current = null;
 		setIsListening(false);
 	}, []);
 
-	// Start/stop listening when voice mode changes
+	// Start listening when entering habitat in voice mode
 	useEffect(() => {
 		if (phase !== "habitat") return;
-		if (accessMode === "voice" && !isListening) startListening();
-		else if (accessMode !== "voice" && isListening) stopListening();
+		if (accessMode === "voice") { setTimeout(() => listen(), 1000); }
+		return () => stopListening();
 	}, [accessMode, phase]);
 
 	// VLibras toggle — show/hide widget based on signs mode
