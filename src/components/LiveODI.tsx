@@ -203,21 +203,22 @@ function EphemeralWindow({ ephemeral, products, onDismiss }: { ephemeral: Epheme
 }
 
 export default function LiveODI() {
-	const [phase, setPhase] = useState<"landing" | "awakening" | "habitat">("landing");
+	const [phase, setPhase] = useState<"greeting" | "doors" | "habitat">("greeting");
 	const [msgs, setMsgs] = useState<Msg[]>([]);
 	const [input, setInput] = useState("");
 	const [isSending, setIsSending] = useState(false);
-	const [orbColor, setOrbColor] = useState(P.glow);
+	const [orbColor, setOrbColor] = useState(P.spirit);
 	const [isSpeaking, setIsSpeaking] = useState(false);
 
 	// Referral system
 	const [referrer, setReferrer] = useState<string | null>(null);
+	const referrerRef = useRef<string | null>(null);
 	useEffect(() => {
 		if (typeof window === "undefined") return;
 		const params = new URLSearchParams(window.location.search);
 		const ref = params.get("ref");
-		if (ref) { setReferrer(ref); localStorage.setItem("odi_referrer", ref); }
-		else { const saved = localStorage.getItem("odi_referrer"); if (saved) setReferrer(saved); }
+		if (ref) { setReferrer(ref); referrerRef.current = ref; localStorage.setItem("odi_referrer", ref); }
+		else { const saved = localStorage.getItem("odi_referrer"); if (saved) { setReferrer(saved); referrerRef.current = saved; } }
 	}, []);
 	const [ephemeral, setEphemeral] = useState<EphemeralData | null>(null);
 	const [ephProducts, setEphProducts] = useState<any[]>([]);
@@ -249,6 +250,8 @@ export default function LiveODI() {
 	const audioRef = useRef<HTMLAudioElement | null>(null);
 	const isPlayingRef = useRef(false);
 	const hasConvo = msgs.length > 0 && phase === "habitat";
+	const greetedRef = useRef(false);
+	const startContinuousListenRef = useRef<() => void>();
 
 	// TTS — declared early so useEffects can reference it
 	const speak = useCallback((text: string, voice: string = "ramona") => {
@@ -271,7 +274,7 @@ export default function LiveODI() {
 			const url = URL.createObjectURL(blob);
 			const audio = audioRef.current || new Audio();
 			audioRef.current = audio;
-			audio.onended = () => { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); URL.revokeObjectURL(url); };
+			audio.onended = () => { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); URL.revokeObjectURL(url); if (accessModeRef.current === "voice") setTimeout(() => startContinuousListenRef.current?.(), 300); };
 			audio.onerror = () => { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); };
 			audio.src = url;
 			audio.play().catch(() => { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); });
@@ -285,23 +288,68 @@ export default function LiveODI() {
 	const lastOdiTextRef = useRef("");
 	const ttsEndTimeRef = useRef(0);
 
-	const tapToListen = useCallback(() => {
-		if (isPlayingRef.current || isListening) return;
+	const silenceTimerRef = useRef<any>(null);
+
+	const startContinuousListen = useCallback(() => {
+		if (isPlayingRef.current) return;
 		const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 		if (!SR) return;
 		const rec = new SR();
 		rec.lang = "es-CO";
-		rec.continuous = false;
-		rec.interimResults = false;
+		rec.continuous = true;
+		rec.interimResults = true;
+		let finalText = "";
 		rec.onresult = (event: any) => {
-			const text = event.results[0]?.[0]?.transcript?.trim();
-			if (!text || text.length < 2) return;
-			if (sendRef.current) sendRef.current(text);
+			// Reset silence timer on any result
+			if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+			let interim = "";
+			for (let i = event.resultIndex; i < event.results.length; i++) {
+				if (event.results[i].isFinal) {
+					finalText += event.results[i][0].transcript;
+				} else {
+					interim += event.results[i][0].transcript;
+				}
+			}
+			// 1.8s silence after last result → send
+			silenceTimerRef.current = setTimeout(() => {
+				const text = finalText.trim();
+				if (text && text.length >= 2) {
+					if (sendRef.current) sendRef.current(text);
+					finalText = "";
+				}
+				// Stop and restart for next utterance
+				try { rec.stop(); } catch {}
+			}, 1800);
 		};
-		rec.onend = () => setIsListening(false);
-		rec.onerror = () => setIsListening(false);
+		rec.onend = () => {
+			setIsListening(false);
+			// Auto-restart if in voice mode and not speaking
+			if (!isPlayingRef.current && accessModeRef.current === "voice") {
+				setTimeout(() => {
+					if (!isPlayingRef.current) startContinuousListen();
+				}, 500);
+			}
+		};
+		rec.onerror = (e: any) => {
+			setIsListening(false);
+			// Restart on non-fatal errors
+			if (e.error !== "not-allowed" && e.error !== "service-not-allowed") {
+				setTimeout(() => {
+					if (!isPlayingRef.current && accessModeRef.current === "voice") startContinuousListen();
+				}, 1000);
+			}
+		};
 		try { rec.start(); recognitionRef.current = rec; setIsListening(true); } catch { setIsListening(false); }
-	}, [isListening]);
+	}, []);
+
+	const accessModeRef = useRef(accessMode);
+	useEffect(() => { accessModeRef.current = accessMode; }, [accessMode]);
+	useEffect(() => { startContinuousListenRef.current = startContinuousListen; }, [startContinuousListen]);
+
+	const tapToListen = useCallback(() => {
+		if (isPlayingRef.current || isListening) return;
+		startContinuousListen();
+	}, [isListening, startContinuousListen]);
 
 	// VLibras toggle — show/hide widget based on signs mode
 	useEffect(() => {
@@ -315,28 +363,22 @@ export default function LiveODI() {
 		scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
 	}, [msgs]);
 
-	// Landing → any key or touch → awakening
+	// Auto-greet on mount — Ramona speaks immediately, then show doors
 	useEffect(() => {
-		if (phase !== "landing") return;
-		const h = () => setPhase("awakening");
-		window.addEventListener("keydown", h, { once: true });
-		window.addEventListener("pointerdown", h, { once: true });
-		return () => { window.removeEventListener("keydown", h); window.removeEventListener("pointerdown", h); };
-	}, [phase]);
-
-	// Awakening → Ramona greets
-	useEffect(() => {
-		if (phase !== "awakening") return;
-		let cancelled = false;
-		const seq = async () => {
-			await new Promise(r => setTimeout(r, 800));
-			if (cancelled) return;
-			setOrbColor(P.spirit);
-			setPhase("habitat");
-		};
-		seq();
-		return () => { cancelled = true; };
-	}, [phase, accessMode, speak]);
+		if (greetedRef.current) return;
+		greetedRef.current = true;
+		const timer = setTimeout(() => {
+			const ref = referrerRef.current;
+			const greeting = ref
+				? `Hola. ${ref} me habló de ti. Bienvenido.`
+				: "Hola. Estoy aquí. Bienvenido.";
+			setMsgs([{ role: "odi", text: greeting, voice: "ramona", mode: "presence" }]);
+			speak(greeting, "ramona");
+			// Show doors after greeting audio starts
+			setTimeout(() => setPhase("doors"), 600);
+		}, 500);
+		return () => clearTimeout(timer);
+	}, [speak]);
 
 	// Send message to Chat API
 	const sendText = useCallback(async (voiceText: string) => {
@@ -524,59 +566,25 @@ export default function LiveODI() {
 				{/* Orb */}
 				<div style={{
 					transition: "all 0.9s cubic-bezier(0.22, 0.61, 0.36, 1)",
-					transform: hasConvo ? "scale(0.3)" : phase === "awakening" ? "scale(1.08)" : "scale(1)",
+					transform: hasConvo ? "scale(0.3)" : phase === "doors" ? "scale(1.08)" : "scale(1)",
 					marginBottom: hasConvo ? -16 : 20,
 					marginTop: hasConvo ? 4 : 0,
 				}}>
-					<button onClick={() => { if (phase === "landing") setPhase("awakening"); else if (phase === "habitat") { if (accessMode === "voice") tapToListen(); else inputRef.current?.focus(); } }}
+					<button onClick={() => { if (phase === "habitat") { if (accessMode === "voice") tapToListen(); else inputRef.current?.focus(); } }}
 						aria-label="ODI" tabIndex={0}
 						style={{
 							width: 150, height: 150, borderRadius: "50%",
 							background: `radial-gradient(circle at 48% 38%, ${orbColor}dd 0%, ${orbColor}88 28%, ${orbColor}44 52%, ${orbColor}11 75%, transparent 100%)`,
 							boxShadow: `0 0 52px ${orbColor}44, inset 0 0 45px ${orbColor}22`,
 							border: "none", cursor: "pointer",
-							animation: isSpeaking ? "orbSpeak 1.2s ease-in-out infinite" : phase === "landing" ? "orbLanding 3s ease-in-out infinite" : isSending ? "orbSpeak 2s ease-in-out infinite" : "orbBreathe 4s ease-in-out infinite",
+							animation: isSpeaking ? "orbSpeak 1.2s ease-in-out infinite" : phase === "greeting" ? "orbLanding 3s ease-in-out infinite" : isSending ? "orbSpeak 2s ease-in-out infinite" : "orbBreathe 4s ease-in-out infinite",
 							transition: "background 1.5s ease, box-shadow 1.5s ease",
 						}}
 					/>
 				</div>
 
-				{/* Landing */}
-				{phase === "landing" && (
-					<div style={{ textAlign: "center", animation: "fadeIn 1s ease" }}>
-						<p style={{ margin: 0, fontSize: "0.68rem", color: P.textSoft, fontWeight: 400, letterSpacing: "0.04em" }}>
-							Organismo Digital Industrial
-						</p>
-						{referrer && (
-							<p style={{ margin: "8px 0 0", fontSize: "0.56rem", color: P.warm, fontWeight: 400, animation: "fadeIn 1.5s ease" }}>
-								Recomendado por {referrer}
-							</p>
-						)}
-						<div style={{ marginTop: 32, display: "flex", gap: 16, justifyContent: "center", animation: "fadeIn 2.5s ease" }}>
-							{[
-								{ icon: "🎙", label: "Voz", mode: "voice" as const },
-								{ icon: "⌨", label: "Texto", mode: "text" as const },
-								{ icon: "🤟", label: "Señas", mode: "signs" as const },
-							].map(door => (
-								<button key={door.mode} onClick={() => {
-									if (door.mode === "signs") { setAccessMode("signs"); localStorage.setItem("odi_a11y_mode", "signs"); }
-									else if (door.mode === "voice") { setAccessMode("voice"); localStorage.setItem("odi_a11y_mode", "voice"); }
-									setPhase("awakening");
-								}}
-									style={{ background: "transparent", border: `1px solid ${P.border}`, borderRadius: 12, color: P.textDim, fontSize: "0.65rem", cursor: "pointer", fontFamily: "inherit", padding: "12px 18px", transition: "all 0.3s", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}
-									onMouseEnter={e => { (e.target as HTMLElement).style.borderColor = P.glow + "55"; (e.target as HTMLElement).style.color = P.textSoft; }}
-									onMouseLeave={e => { (e.target as HTMLElement).style.borderColor = P.border; (e.target as HTMLElement).style.color = P.textDim; }}
-								>
-									<span style={{ fontSize: "1.3rem" }}>{door.icon}</span>
-									{door.label}
-								</button>
-							))}
-						</div>
-					</div>
-				)}
-
-				{/* Awakening */}
-				{phase === "awakening" && (
+				{/* Greeting + Doors */}
+				{(phase === "greeting" || phase === "doors") && (
 					<div style={{ textAlign: "center", animation: "fadeIn 0.6s ease" }}>
 						{msgs.length === 0 && <p style={{ fontSize: "0.62rem", color: P.textFaint }}>...</p>}
 						{msgs.map((m, i) => (
@@ -585,6 +593,29 @@ export default function LiveODI() {
 								<p style={{ margin: "4px 0", fontSize: "1.05rem", fontWeight: 500, color: P.text }}>{m.text}</p>
 							</div>
 						))}
+						{phase === "doors" && (
+							<div style={{ marginTop: 28, display: "flex", gap: 16, justifyContent: "center", animation: "fadeIn 0.8s ease" }}>
+								{[
+									{ icon: "🎙", label: "Voz", mode: "voice" as const },
+									{ icon: "⌨", label: "Texto", mode: "text" as const },
+									{ icon: "🤟", label: "Señas", mode: "signs" as const },
+								].map(door => (
+									<button key={door.mode} onClick={() => {
+										setAccessMode(door.mode === "signs" ? "signs" : door.mode === "text" ? "text" : "voice");
+										localStorage.setItem("odi_a11y_mode", door.mode);
+										setPhase("habitat");
+										if (door.mode === "voice") setTimeout(() => startContinuousListen(), 800);
+									}}
+										style={{ background: "transparent", border: `1px solid ${P.border}`, borderRadius: 12, color: P.textDim, fontSize: "0.65rem", cursor: "pointer", fontFamily: "inherit", padding: "12px 18px", transition: "all 0.3s", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}
+										onMouseEnter={e => { (e.target as HTMLElement).style.borderColor = P.glow + "55"; (e.target as HTMLElement).style.color = P.textSoft; }}
+										onMouseLeave={e => { (e.target as HTMLElement).style.borderColor = P.border; (e.target as HTMLElement).style.color = P.textDim; }}
+									>
+										<span style={{ fontSize: "1.3rem" }}>{door.icon}</span>
+										{door.label}
+									</button>
+								))}
+							</div>
+						)}
 					</div>
 				)}
 
@@ -615,7 +646,23 @@ export default function LiveODI() {
 				)}
 			</main>
 
-			{/* Input — hidden in "voice" only mode */}
+			{/* Voice mode — permanent mic indicator */}
+			{phase === "habitat" && accessMode === "voice" && (
+				<footer style={{ padding: "10px 16px 20px", display: "flex", justifyContent: "center" }}>
+					<button onClick={() => { if (isListening) { try { recognitionRef.current?.stop(); } catch {} } else startContinuousListen(); }}
+						aria-label={isListening ? "Mic activo — escuchando" : "Activar mic"}
+						style={{
+							width: 52, height: 52, borderRadius: "50%",
+							background: isListening ? `${P.spirit}18` : `${P.textFaint}15`,
+							border: `2px solid ${isListening ? P.spirit + "55" : P.textFaint + "33"}`,
+							cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+							fontSize: "1.3rem", transition: "all 0.3s",
+							animation: isListening ? "pulse 2s infinite" : "none",
+							boxShadow: isListening ? `0 0 20px ${P.spirit}33` : "none",
+						}}>🎙</button>
+				</footer>
+			)}
+			{/* Input — text/normal modes */}
 			{phase === "habitat" && accessMode !== "voice" && (
 				<footer role="contentinfo" style={{ padding: "10px 16px 20px", maxWidth: 620, width: "100%", margin: "0 auto" }}>
 					<div style={{
@@ -664,6 +711,7 @@ export default function LiveODI() {
 				@keyframes fadeIn { from{opacity:0}to{opacity:1} }
 			@keyframes fadeOut { from{opacity:1}to{opacity:0} }
 				@keyframes msgIn { from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)} }
+				@keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(196,160,255,0.4)} 70%{box-shadow:0 0 0 12px rgba(196,160,255,0)} 100%{box-shadow:0 0 0 0 rgba(196,160,255,0)} }
 				*{box-sizing:border-box;margin:0}
 				::-webkit-scrollbar{width:2px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${P.textFaint};border-radius:2px}
 				::placeholder{color:${P.textDim}}

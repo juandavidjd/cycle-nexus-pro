@@ -1138,10 +1138,16 @@ export function AgentHabitat() {
 													{ label: "PG Rows", value: (liveManifest.ecosystem.pg_rows || 0).toLocaleString(), color: "#29b6f6" },
 													{ label: "ChromaDB", value: `${(liveManifest.ecosystem.chromadb_docs || 0).toLocaleString()} docs`, color: "#a78bfa" },
 													{ label: "Jobs", value: liveManifest.ecosystem.pipeline_jobs || 0, color: "#ffcc00" },
-													{ label: "Industrias", value: liveManifest.ecosystem.industries || 0, color: "#3af08f" },
+													{ label: "SKU ODI", value: (liveManifest.ecosystem.sku_odi_generated || 0).toLocaleString(), color: "#3af08f" },
+													{ label: "Duplicados", value: liveManifest.ecosystem.sku_duplicados_cross_store || 0, color: "#ef5350" },
+													{ label: "Web Intel", value: `${liveManifest.ecosystem.web_intel_searches || 0} bsq`, color: "#a78bfa" },
+													{ label: "Leads", value: (liveManifest.ecosystem.web_intel_leads || 0).toLocaleString(), color: "#3af08f" },
+													{ label: "Imágenes", value: (liveManifest.ecosystem.producto_imagenes || 0).toLocaleString(), color: "#29b6f6" },
+													{ label: "Fitment", value: (liveManifest.ecosystem.fitment_darrow || 0) + (liveManifest.ecosystem.fitment_vitton || 0), color: "#ffcc00" },
+													{ label: "Compat", value: (liveManifest.ecosystem.compatibilidades || 0).toLocaleString(), color: "#29b6f6" },
+													{ label: "Modelos", value: (liveManifest.ecosystem.modelos_moto || 0).toLocaleString(), color: "#4a5f7f" },
 													{ label: "CES", value: liveManifest.ces?.decisions_total ? `${liveManifest.ces.allowed}/${liveManifest.ces.blocked}/${liveManifest.ces.overrides}` : `${liveManifest.ecosystem?.ces_principles || 15} princ`, color: "#ef5350" },
 													{ label: "Radar", value: `${liveManifest.ecosystem.radar_disciplines || 0} disc`, color: "#29b6f6" },
-													{ label: "Git", value: `${liveManifest.ecosystem.git_commits || 0} commits`, color: "#4a5f7f" },
 													{ label: "Events", value: (liveManifest.ecosystem.agent_events || 0).toLocaleString(), color: "#49c2ff" },
 												].map((item, i) => (
 													<div key={i} className="rounded bg-[#03070d88] px-1.5 py-1">
