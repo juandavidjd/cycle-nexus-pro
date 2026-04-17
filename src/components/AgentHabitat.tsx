@@ -1414,7 +1414,7 @@ export function AgentHabitat() {
 											</a>
 										</div>
 										<div className="text-[9px] text-[#4a5f7f] mt-0.5">
-											15 disciplinas · 33 juegos · guardian verde
+											{liveManifest?.ecosystem?.radar_disciplines || 23} disciplinas · guardian verde
 										</div>
 									</div>
 
