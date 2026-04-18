@@ -16,7 +16,6 @@ const Academia = lazy(() => import("./pages/Academia"));
 const AcademiaModulo = lazy(() => import("./pages/AcademiaModulo"));
 const Auth = lazy(() => import("./pages/Auth"));
 const NotFound = lazy(() => import("./pages/NotFound"));
-const StoreLanding = lazy(() => import("./pages/StoreLanding"));
 
 export default function SRMApp() {
   return (
@@ -35,7 +34,6 @@ export default function SRMApp() {
           <Route path="/academia" element={<Academia />} />
           <Route path="/academia/modulo/:id" element={<AcademiaModulo />} />
           <Route path="/auth" element={<Auth />} />
-          <Route path="/tienda/:storeCode" element={<StoreLanding />} />
           <Route path="/:clientId" element={<ClientPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>

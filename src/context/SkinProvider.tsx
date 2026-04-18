@@ -130,11 +130,31 @@ export function SkinProvider({ children }: { children: ReactNode }) {
  * Se usa `useLocation()` (no `useParams()`) porque StoreSkinGate envuelve a
  * <Routes>, por lo que no hay route match activo cuando corre este hook.
  */
+// Rutas de primer nivel que NO son códigos de tienda.
+// Mantener en sync con <Route path=> de App.tsx + SRMApp.tsx.
+const RESERVED_SLUGS = new Set<string>([
+  "",
+  "manager",
+  "panel",
+  "agent",
+  "catalogo",
+  "clientes",
+  "intelligent",
+  "academia",
+  "auth",
+  "tienda",
+]);
+
 function StoreSkinGate({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const storeCode = useMemo(() => {
-    const m = pathname.match(/^\/tienda\/([^/?#]+)/i);
-    return m ? m[1] : undefined;
+    // 1) /tienda/:code (legacy pattern, still supported)
+    const m1 = pathname.match(/^\/tienda\/([^/?#]+)/i);
+    if (m1) return m1[1];
+    // 2) /:clientId — activar Capa 2 si no es ruta reservada (existing SRM routing)
+    const m2 = pathname.match(/^\/([^/?#]+)$/);
+    if (m2 && !RESERVED_SLUGS.has(m2[1].toLowerCase())) return m2[1];
+    return undefined;
   }, [pathname]);
 
   const { data: profile, isLoading } = useStoreProfile(storeCode);
