@@ -1,17 +1,10 @@
 // src/components/store/CategoryGrid.tsx
-// Grid de categorías con conteo. Link a Shopify collection por nombre.
+// Grid de categorías con conteo. Link a Shopify search (las categorías del
+// Step 10 son derivadas de keywords en títulos — no existen como collections
+// en la mayoría de las tiendas, así que /search?q= es el match fiable).
 
 import { Card, CardContent } from "@/components/ui/card";
 import { useStoreSkin } from "@/context/SkinProvider";
-
-function slugify(s: string): string {
-  return s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
 
 export function CategoryGrid() {
   const store = useStoreSkin();
@@ -24,7 +17,7 @@ export function CategoryGrid() {
         {store.categories.map((cat) => (
           <a
             key={cat.name}
-            href={`${store.shopifyUrl}/collections/${slugify(cat.name)}`}
+            href={`${store.shopifyUrl}/search?q=${encodeURIComponent(cat.name)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="group"
