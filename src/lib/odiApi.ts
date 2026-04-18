@@ -384,3 +384,67 @@ export const managerApi = {
       body: JSON.stringify({ confirm: true }),
     }),
 };
+
+// ═══════════════════════════════════════════════════
+// STORE PROFILES (Pipeline V25.18 Step 10)
+// Fuente única de la Capa 2 del Skin Engine (datos + colores por tienda).
+// Cache en memoria — TTL 60s. El pipeline regenera perfiles por tienda
+// al terminar cada job, por lo que 1 min es seguro.
+// ═══════════════════════════════════════════════════
+
+import type {
+  StoreProfile,
+  StoreProfileListResponse,
+  StoreProfileByIndustryResponse,
+} from '@/types/store-profile';
+
+type CacheEntry<T> = { at: number; data: T };
+const PROFILE_TTL_MS = 60_000;
+const _profileCache = new Map<string, CacheEntry<unknown>>();
+
+async function cachedJson<T>(key: string, url: string): Promise<T> {
+  const hit = _profileCache.get(key);
+  if (hit && Date.now() - hit.at < PROFILE_TTL_MS) {
+    return hit.data as T;
+  }
+  const r = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (!r.ok) {
+    throw new Error(`${url} → HTTP ${r.status}`);
+  }
+  const data = (await r.json()) as T;
+  _profileCache.set(key, { at: Date.now(), data });
+  return data;
+}
+
+/** List 16 summary rows — `GET /store-profiles`. */
+export function fetchStoreProfiles(): Promise<StoreProfileListResponse> {
+  return cachedJson<StoreProfileListResponse>(
+    'list',
+    `${ODI_API}/store-profiles`
+  );
+}
+
+/** Full profile for a single store — `GET /store-profiles/{code}`. */
+export function fetchStoreProfile(storeCode: string): Promise<StoreProfile> {
+  const code = storeCode.toLowerCase();
+  return cachedJson<StoreProfile>(
+    `profile:${code}`,
+    `${ODI_API}/store-profiles/${code}`
+  );
+}
+
+/** Stores filtered by industry — `GET /store-profiles/by-industry/{industry}`. */
+export function fetchStoresForIndustry(
+  industry: string
+): Promise<StoreProfileByIndustryResponse> {
+  const ind = industry.toLowerCase();
+  return cachedJson<StoreProfileByIndustryResponse>(
+    `industry:${ind}`,
+    `${ODI_API}/store-profiles/by-industry/${ind}`
+  );
+}
+
+/** Drop cache — use when you know the pipeline just wrote a new profile. */
+export function clearStoreProfilesCache(): void {
+  _profileCache.clear();
+}
