@@ -133,6 +133,43 @@ function InfoCardEphemeral({ data, onDismiss }: { data: any; onDismiss: () => vo
 	);
 }
 
+function AuthPromptEphemeral({ data, onDismiss }: { data: any; onDismiss: () => void }) {
+	const googleUrl = data.google_url || "https://api.liveodi.com/auth/google";
+	return (
+		<div style={{
+			background: "rgba(11,22,37,0.95)", border: `1px solid ${P.spirit}33`,
+			borderRadius: 18, padding: "24px 26px", backdropFilter: "blur(14px)",
+			minWidth: 300, maxWidth: 380,
+			boxShadow: `0 20px 60px rgba(0,0,0,0.5), 0 0 40px ${P.spirit}15`,
+		}}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 10 }}>
+				<div>
+					<h3 style={{ fontSize: "1rem", fontWeight: 600, color: P.text, margin: 0, marginBottom: 4 }}>{data.title || "¿Puedo conocerte?"}</h3>
+					<p style={{ fontSize: "0.74rem", color: P.textSoft, margin: 0, lineHeight: 1.55 }}>{data.body || "Inicia sesion y te reconozco la proxima vez."}</p>
+				</div>
+				<button onClick={onDismiss} aria-label="Cerrar"
+					style={{ background: "transparent", border: "none", color: P.textDim, cursor: "pointer", fontSize: "0.8rem", marginLeft: 8 }}>✕</button>
+			</div>
+			<a href={googleUrl}
+				style={{
+					display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+					width: "100%", padding: "11px 14px", borderRadius: 12,
+					background: "#ffffff", color: "#1f2937", fontSize: "0.82rem", fontWeight: 600,
+					textDecoration: "none", marginTop: 14, transition: "all 0.2s",
+				}}>
+				<svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+				Continuar con Google
+			</a>
+			<button onClick={onDismiss}
+				style={{
+					background: "transparent", border: "none", color: P.textDim,
+					fontSize: "0.68rem", cursor: "pointer", fontFamily: "inherit",
+					padding: "8px 0 0", width: "100%", textAlign: "center",
+				}}>{data.skip_label || "Ahora no"}</button>
+		</div>
+	);
+}
+
 function RegistrationPrompt({ prompt, onAccept, onSkip }: { prompt: { type: string; text: string; acceptLabel: string }; onAccept: () => void; onSkip: () => void }) {
 	return (
 		<div style={{
@@ -198,6 +235,7 @@ function EphemeralWindow({ ephemeral, products, onDismiss }: { ephemeral: Epheme
 			{ephemeral.type === "product_cards" && <ProductCardsEphemeral products={products} onDismiss={dismiss} />}
 			{ephemeral.type === "guardian_shield" && <GuardianShieldEphemeral data={ephemeral.data} />}
 			{ephemeral.type === "info_card" && <InfoCardEphemeral data={ephemeral.data} onDismiss={dismiss} />}
+			{ephemeral.type === "auth_prompt" && <AuthPromptEphemeral data={ephemeral.data} onDismiss={dismiss} />}
 		</div>
 	);
 }
@@ -213,12 +251,40 @@ export default function LiveODI() {
 	// Referral system
 	const [referrer, setReferrer] = useState<string | null>(null);
 	const referrerRef = useRef<string | null>(null);
+	// Auth session (Google/Microsoft/Apple OAuth)
+	const [authUser, setAuthUser] = useState<{ name?: string; email?: string; provider?: string; human_id?: string } | null>(null);
+	const authTokenRef = useRef<string | null>(null);
 	useEffect(() => {
 		if (typeof window === "undefined") return;
 		const params = new URLSearchParams(window.location.search);
 		const ref = params.get("ref");
 		if (ref) { setReferrer(ref); referrerRef.current = ref; localStorage.setItem("odi_referrer", ref); }
 		else { const saved = localStorage.getItem("odi_referrer"); if (saved) { setReferrer(saved); referrerRef.current = saved; } }
+
+		// Capture session token from URL (OAuth callback) or localStorage
+		const urlToken = params.get("session");
+		const storedToken = localStorage.getItem("odi_session");
+		const token = urlToken || storedToken;
+		if (urlToken) {
+			localStorage.setItem("odi_session", urlToken);
+			// Clean URL
+			const cleanUrl = window.location.pathname + (ref ? `?ref=${ref}` : "");
+			window.history.replaceState({}, "", cleanUrl);
+		}
+		if (token) {
+			authTokenRef.current = token;
+			// Validate and fetch user data
+			fetch("https://api.liveodi.com/auth/validate", {
+				headers: { Authorization: `Bearer ${token}` },
+			}).then(r => r.json()).then(data => {
+				if (data && data.authenticated) {
+					setAuthUser({ name: data.name, email: data.email, provider: data.provider, human_id: data.human_id });
+				} else {
+					localStorage.removeItem("odi_session");
+					authTokenRef.current = null;
+				}
+			}).catch(() => {});
+		}
 	}, []);
 	const [ephemeral, setEphemeral] = useState<EphemeralData | null>(null);
 	const [ephProducts, setEphProducts] = useState<any[]>([]);
@@ -298,26 +364,24 @@ export default function LiveODI() {
 		rec.lang = "es-CO";
 		rec.continuous = true;
 		rec.interimResults = true;
-		let finalText = "";
 		rec.onresult = (event: any) => {
 			// Reset silence timer on any result
 			if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-			let interim = "";
-			for (let i = event.resultIndex; i < event.results.length; i++) {
+			// Rebuild full transcript from event.results every time (avoids accumulation bugs).
+			// Each result slot is stable; reading all finals gives the total sentence so far.
+			let fullText = "";
+			for (let i = 0; i < event.results.length; i++) {
 				if (event.results[i].isFinal) {
-					finalText += event.results[i][0].transcript;
-				} else {
-					interim += event.results[i][0].transcript;
+					fullText += event.results[i][0].transcript;
 				}
 			}
-			// 1.8s silence after last result → send
+			// 1.8s silence after last result → send the final text
 			silenceTimerRef.current = setTimeout(() => {
-				const text = finalText.trim();
+				const text = fullText.trim();
 				if (text && text.length >= 2) {
 					if (sendRef.current) sendRef.current(text);
-					finalText = "";
 				}
-				// Stop and restart for next utterance
+				// Stop and restart for next utterance (clears event.results)
 				try { rec.stop(); } catch {}
 			}, 1800);
 		};
@@ -364,21 +428,28 @@ export default function LiveODI() {
 	}, [msgs]);
 
 	// Auto-greet on mount — Ramona speaks immediately, then show doors
+	// Delayed 1.2s to give auth validation a chance to resolve
 	useEffect(() => {
 		if (greetedRef.current) return;
 		greetedRef.current = true;
 		const timer = setTimeout(() => {
 			const ref = referrerRef.current;
-			const greeting = ref
-				? `Hola. ${ref} me habló de ti. Bienvenido.`
-				: "Hola. Estoy aquí. Bienvenido.";
+			const firstName = authUser?.name?.split(" ")[0];
+			let greeting: string;
+			if (firstName) {
+				greeting = `Hola ${firstName}. Te reconozco. Bienvenido de vuelta.`;
+			} else if (ref) {
+				greeting = `Hola. ${ref} me habló de ti. Bienvenido.`;
+			} else {
+				greeting = "Hola. Estoy aquí. Bienvenido.";
+			}
 			setMsgs([{ role: "odi", text: greeting, voice: "ramona", mode: "presence" }]);
 			speak(greeting, "ramona");
 			// Show doors after greeting audio starts
 			setTimeout(() => setPhase("doors"), 600);
-		}, 500);
+		}, 1200);
 		return () => clearTimeout(timer);
-	}, [speak]);
+	}, [speak, authUser]);
 
 	// Send message to Chat API
 	const sendText = useCallback(async (voiceText: string) => {
@@ -387,9 +458,11 @@ export default function LiveODI() {
 		turnRef.current++;
 		setMsgs(prev => [...prev, { role: "user", text: voiceText }]);
 		try {
+			const headers: Record<string, string> = { "Content-Type": "application/json" };
+			if (authTokenRef.current) headers["Authorization"] = `Bearer ${authTokenRef.current}`;
 			const resp = await fetch(CHAT_URL, {
-				method: "POST", headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ message: voiceText, session_id: sessionRef.current, mode: "commerce" }),
+				method: "POST", headers,
+				body: JSON.stringify({ message: voiceText, session_id: sessionRef.current, mode: "commerce", user_name: authUser?.name }),
 			});
 			if (resp.ok) {
 				const data = await resp.json();
@@ -412,7 +485,7 @@ export default function LiveODI() {
 			setMsgs(prev => [...prev, { role: "odi", text: "No pude conectar. Intenta de nuevo.", voice: "ramona", mode: "care" }]);
 		}
 		setIsSending(false);
-	}, [isSending, speak, accessMode]);
+	}, [isSending, speak, accessMode, authUser]);
 
 	// Wire sendRef for STT
 	useEffect(() => { sendRef.current = sendText; }, [sendText]);
@@ -441,9 +514,11 @@ export default function LiveODI() {
 		setMsgs(prev => [...prev, { role: "user", text }]);
 
 		try {
+			const headers: Record<string, string> = { "Content-Type": "application/json" };
+			if (authTokenRef.current) headers["Authorization"] = `Bearer ${authTokenRef.current}`;
 			const resp = await fetch(CHAT_URL, {
-				method: "POST", headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ message: text, session_id: sessionRef.current, mode: "commerce" }),
+				method: "POST", headers,
+				body: JSON.stringify({ message: text, session_id: sessionRef.current, mode: "commerce", user_name: authUser?.name }),
 			});
 			if (resp.ok) {
 				const data = await resp.json();

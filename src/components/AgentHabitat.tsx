@@ -17,7 +17,7 @@ interface AgentEvent {
 
 type Phase = "idle" | "connecting" | "registering" | "live" | "offline";
 type InputMode = "text" | "voice" | "signs";
-type SideTab = "flows" | "manifest" | "stats" | "events" | "domains";
+type SideTab = "flows" | "manifest" | "stats" | "events" | "domains" | "audit" | "security" | "postgres";
 
 // ── Constants ──
 const WS_URLS = [
@@ -169,6 +169,20 @@ export function AgentHabitat() {
 	const [stores, setStores] = useState<any[]>(() => {
 		if (typeof window === "undefined") return [];
 		try { const c = localStorage.getItem("odi_cache_stores"); return c ? JSON.parse(c) : []; } catch { return []; }
+	});
+
+	// ── Auditoria / Seguridad / Postgres ──
+	const [auditData, setAuditData] = useState<any>(() => {
+		if (typeof window === "undefined") return null;
+		try { const c = localStorage.getItem("odi_cache_audit"); return c ? JSON.parse(c) : null; } catch { return null; }
+	});
+	const [securityData, setSecurityData] = useState<any>(() => {
+		if (typeof window === "undefined") return null;
+		try { const c = localStorage.getItem("odi_cache_security"); return c ? JSON.parse(c) : null; } catch { return null; }
+	});
+	const [postgresData, setPostgresData] = useState<any>(() => {
+		if (typeof window === "undefined") return null;
+		try { const c = localStorage.getItem("odi_cache_postgres"); return c ? JSON.parse(c) : null; } catch { return null; }
 	});
 	const [panelLoading, setPanelLoading] = useState(!liveManifest);
 
@@ -563,6 +577,9 @@ export function AgentHabitat() {
 			cachedFetch(`${AGENT_API}/events/recent`, "odi_cache_events", setRecentEvents, (d) => d.events || []);
 			cachedFetch(`${AGENT_API}/domains`, "odi_cache_domains", setDomains);
 			cachedFetch(`${AGENT_API}/stores`, "odi_cache_stores", setStores, (d) => d.stores || []);
+			cachedFetch(`${AGENT_API}/audit`, "odi_cache_audit", setAuditData);
+			cachedFetch(`${AGENT_API}/security`, "odi_cache_security", setSecurityData);
+			cachedFetch(`${AGENT_API}/postgres`, "odi_cache_postgres", setPostgresData);
 		};
 		document.addEventListener("visibilitychange", () => { if (!document.hidden) onFocus(); });
 		return () => document.removeEventListener("visibilitychange", onFocus);
@@ -614,6 +631,18 @@ export function AgentHabitat() {
 		const load = () => cachedFetch(`${AGENT_API}/events/recent`, "odi_cache_events", setRecentEvents, (d) => d.events || []);
 		load();
 		const iv = setInterval(load, 15000);
+		return () => clearInterval(iv);
+	}, [cachedFetch]);
+
+	// === Load auditoria / seguridad / postgres (refresh every 60s) ===
+	useEffect(() => {
+		const load = () => {
+			cachedFetch(`${AGENT_API}/audit`, "odi_cache_audit", setAuditData);
+			cachedFetch(`${AGENT_API}/security`, "odi_cache_security", setSecurityData);
+			cachedFetch(`${AGENT_API}/postgres`, "odi_cache_postgres", setPostgresData);
+		};
+		load();
+		const iv = setInterval(load, 60000);
 		return () => clearInterval(iv);
 	}, [cachedFetch]);
 
@@ -1011,18 +1040,21 @@ export function AgentHabitat() {
 						</div>
 					</section>
 
-					{/* ── Sidebar: Flows / Manifest / Stats ── */}
+					{/* ── Sidebar: Flows / Manifest / Stats / Auditoría / Seguridad / PG ── */}
 					{true && (
-						<div className="rounded-lg border border-[#1a2a42] bg-[#0a1628] p-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 100px)" }} role="main" aria-label="Panel del ecosistema ODI">
-							{/* Tabs */}
-							<div className="flex gap-1 mb-3">
-								{(["manifest", "events", "domains", "flows", "stats"] as SideTab[]).map((t) => (
+						<div className="odi-panel rounded-lg border border-[#1a2a42] bg-[#0a1628] overflow-y-auto relative" style={{ maxHeight: "calc(100vh - 100px)" }} role="main" aria-label="Panel del ecosistema ODI">
+							{/* Tabs (sticky) */}
+							<div className="sticky top-0 z-20 flex gap-1 flex-wrap px-4 pt-4 pb-3 backdrop-blur-md bg-[#0a1628cc] border-b border-[#1a2a42]">
+								{(["manifest", "events", "domains", "flows", "stats", "audit", "security", "postgres"] as SideTab[]).map((t) => (
 									<button key={t} onClick={() => setSideTab(t)}
 										className={`text-[10px] px-2 py-1 rounded-full border cursor-pointer transition-colors ${sideTab === t ? "bg-[#49c2ff22] border-[#49c2ff44] text-[#49c2ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f] hover:text-[#7f95bb]"}`}>
-										{t === "manifest" ? "Manifest" : t === "events" ? "Eventos" : t === "domains" ? "Dominios" : t === "flows" ? `Flujos (${flows.length})` : "Stats"}
+										{t === "manifest" ? "Manifest" : t === "events" ? "Eventos" : t === "domains" ? "Dominios" : t === "flows" ? `Flujos (${flows.length})` : t === "stats" ? "Stats" : t === "audit" ? "Auditoría" : t === "security" ? "Seguridad" : "PostgreSQL"}
 									</button>
 								))}
 							</div>
+
+							{/* Tab content (padded) */}
+							<div className="px-4 pt-3 pb-4">
 
 							{/* ── Flows tab ── */}
 							{sideTab === "flows" && (
@@ -1595,6 +1627,182 @@ export function AgentHabitat() {
 									{[1,2,3].map(i => (<div key={i} className="rounded-lg bg-[#0a162855] h-8 mb-1 animate-pulse" />))}
 								</div>
 							)}
+
+							{/* ── Auditoría tab ── */}
+							{sideTab === "audit" && !auditData && (
+								<div className="py-4">
+									{[1,2,3].map(i => (<div key={i} className="rounded-lg bg-[#0a162855] h-8 mb-1 animate-pulse" />))}
+									<p className="text-[10px] text-[#4a5f7f] text-center mt-2">Cargando auditoría...</p>
+								</div>
+							)}
+							{sideTab === "audit" && auditData && (
+								<div className="grid gap-3">
+									<div>
+										<h4 className="text-[10px] font-semibold text-[#7f95bb] mb-2">Findings por severidad</h4>
+										<div className="grid grid-cols-2 gap-2">
+											{Object.entries(auditData.findings_by_severity || {}).map(([sev, count]: [string, any]) => {
+												const color = sev === "warning" ? "#ffcc00" : sev === "pass" ? "#3af08f" : sev === "critical" ? "#ff4444" : "#7f95bb";
+												return (
+													<div key={sev} className="rounded border border-[#1a2a42] bg-[#03070d] px-2 py-1.5">
+														<div className="text-[9px] uppercase tracking-wider" style={{ color }}>{sev}</div>
+														<div className="text-sm font-semibold text-[#dbe7ff]">{count}</div>
+													</div>
+												);
+											})}
+										</div>
+									</div>
+									<div>
+										<h4 className="text-[10px] font-semibold text-[#7f95bb] mb-2">
+											Auditorías por trigger ({auditData.total_audits || 0} total)
+										</h4>
+										<div className="grid gap-1">
+											{(auditData.audits_by_trigger || []).map((t: any, i: number) => (
+												<div key={i} className="flex justify-between rounded px-2 py-1 border border-[#1a2a42] bg-[#03070d]">
+													<span className="text-[10px] text-[#dbe7ff]">{t.trigger}</span>
+													<span className="text-[10px] text-[#49c2ff] font-mono">{t.count}</span>
+												</div>
+											))}
+										</div>
+									</div>
+									<div>
+										<h4 className="text-[10px] font-semibold text-[#7f95bb] mb-2">Últimas 10 auditorías</h4>
+										<div className="grid gap-1">
+											{(auditData.recent_audits || []).map((a: any) => {
+												const pctColor = a.approval_pct >= 90 ? "#3af08f" : a.approval_pct >= 70 ? "#ffcc00" : "#ff4444";
+												return (
+													<div key={a.id} className="rounded px-2 py-1.5 border border-[#1a2a42] bg-[#03070d]">
+														<div className="flex items-center justify-between mb-0.5">
+															<span className="text-[10px] font-semibold text-[#dbe7ff]">{a.tienda}</span>
+															<span className="text-[10px] font-mono" style={{ color: pctColor }}>{a.approval_pct}%</span>
+														</div>
+														<div className="flex items-center justify-between text-[9px] text-[#4a5f7f]">
+															<span>{a.auditor} · {a.trigger}</span>
+															<span>{a.aprobados}/{a.productos_auditados}</span>
+														</div>
+													</div>
+												);
+											})}
+										</div>
+									</div>
+								</div>
+							)}
+
+							{/* ── Seguridad tab ── */}
+							{sideTab === "security" && !securityData && (
+								<div className="py-4">
+									{[1,2,3].map(i => (<div key={i} className="rounded-lg bg-[#0a162855] h-8 mb-1 animate-pulse" />))}
+									<p className="text-[10px] text-[#4a5f7f] text-center mt-2">Cargando seguridad...</p>
+								</div>
+							)}
+							{sideTab === "security" && securityData && (
+								<div className="grid gap-3">
+									<div>
+										<h4 className="text-[10px] font-semibold text-[#7f95bb] mb-2">
+											Matriz viva — {securityData.matrix?.total_closed || 0} cerrados · {securityData.matrix?.total_open || 0} abiertos
+										</h4>
+										<div className="grid grid-cols-4 gap-2">
+											{["P0", "P1", "P2", "P3"].map((sev) => {
+												const m = securityData.matrix?.[sev] || {};
+												const sevColor = sev === "P0" ? "#ff4444" : sev === "P1" ? "#ff9800" : sev === "P2" ? "#ffcc00" : "#7f95bb";
+												return (
+													<div key={sev} className="rounded border border-[#1a2a42] bg-[#03070d] px-2 py-2 text-center">
+														<div className="text-[10px] font-semibold" style={{ color: sevColor }}>{sev}</div>
+														<div className="text-[8px] text-[#4a5f7f]">{m.label}</div>
+														<div className="mt-1 text-sm font-bold text-[#3af08f]">{m.closed}</div>
+														<div className="text-[8px] text-[#4a5f7f]">cerrados</div>
+														{m.open > 0 && <div className="text-[10px] text-[#ff4444] mt-0.5">{m.open} abiertos</div>}
+													</div>
+												);
+											})}
+										</div>
+									</div>
+									<div>
+										<h4 className="text-[10px] font-semibold text-[#7f95bb] mb-2">CES últimas 24h</h4>
+										<div className="grid grid-cols-3 gap-2">
+											<div className="rounded border border-[#1a2a42] bg-[#03070d] px-2 py-1.5 text-center">
+												<div className="text-[9px] text-[#3af08f] uppercase">Allowed</div>
+												<div className="text-sm font-semibold text-[#dbe7ff]">{securityData.ces_24h?.allowed_24h || 0}</div>
+											</div>
+											<div className="rounded border border-[#1a2a42] bg-[#03070d] px-2 py-1.5 text-center">
+												<div className="text-[9px] text-[#ff4444] uppercase">Blocked</div>
+												<div className="text-sm font-semibold text-[#dbe7ff]">{securityData.ces_24h?.blocked_24h || 0}</div>
+											</div>
+											<div className="rounded border border-[#1a2a42] bg-[#03070d] px-2 py-1.5 text-center">
+												<div className="text-[9px] text-[#ffcc00] uppercase">Humans</div>
+												<div className="text-sm font-semibold text-[#dbe7ff]">{securityData.ces_24h?.humans_24h || 0}</div>
+											</div>
+										</div>
+									</div>
+									<div>
+										<h4 className="text-[10px] font-semibold text-[#7f95bb] mb-2">Capas activas ({(securityData.layers || []).length})</h4>
+										<div className="grid gap-1">
+											{(securityData.layers || []).map((l: any, i: number) => (
+												<div key={i} className="rounded px-2 py-1.5 border border-[#1a2a42] bg-[#03070d]">
+													<div className="flex items-center justify-between mb-0.5">
+														<span className="text-[10px] font-semibold text-[#dbe7ff]">{l.name}</span>
+														<span className="text-[9px] text-[#3af08f]">● {l.status}</span>
+													</div>
+													<p className="text-[9px] text-[#4a5f7f] leading-snug">{l.detail}</p>
+												</div>
+											))}
+										</div>
+									</div>
+									{securityData.last_audit_commit && (
+										<p className="text-[9px] text-[#4a5f7f] text-center">Último audit commit: <span className="font-mono text-[#7f95bb]">{securityData.last_audit_commit}</span></p>
+									)}
+								</div>
+							)}
+
+							{/* ── PostgreSQL tab ── */}
+							{sideTab === "postgres" && !postgresData && (
+								<div className="py-4">
+									{[1,2,3].map(i => (<div key={i} className="rounded-lg bg-[#0a162855] h-8 mb-1 animate-pulse" />))}
+									<p className="text-[10px] text-[#4a5f7f] text-center mt-2">Cargando PostgreSQL...</p>
+								</div>
+							)}
+							{sideTab === "postgres" && postgresData && (
+								<div className="grid gap-3">
+									<div className="grid grid-cols-2 gap-2">
+										<div className="rounded border border-[#1a2a42] bg-[#03070d] px-2 py-2">
+											<div className="text-[9px] text-[#7f95bb] uppercase">DB Size</div>
+											<div className="text-sm font-bold text-[#49c2ff]">{postgresData.db_size || "?"}</div>
+										</div>
+										<div className="rounded border border-[#1a2a42] bg-[#03070d] px-2 py-2">
+											<div className="text-[9px] text-[#7f95bb] uppercase">Tablas</div>
+											<div className="text-sm font-bold text-[#dbe7ff]">{postgresData.total_tables || 0}</div>
+										</div>
+										<div className="rounded border border-[#1a2a42] bg-[#03070d] px-2 py-2">
+											<div className="text-[9px] text-[#7f95bb] uppercase">Filas totales</div>
+											<div className="text-sm font-bold text-[#dbe7ff]">{(postgresData.total_rows || 0).toLocaleString()}</div>
+										</div>
+										<div className="rounded border border-[#1a2a42] bg-[#03070d] px-2 py-2">
+											<div className="text-[9px] text-[#7f95bb] uppercase">Conexiones</div>
+											<div className="text-sm font-bold text-[#dbe7ff]">
+												{postgresData.connections?.active || 0}<span className="text-[10px] text-[#4a5f7f]"> / {postgresData.connections?.total || 0}</span>
+											</div>
+										</div>
+									</div>
+									<div>
+										<h4 className="text-[10px] font-semibold text-[#7f95bb] mb-2">Top 25 tablas por tamaño</h4>
+										<div className="grid gap-0.5">
+											{(postgresData.top_tables || []).map((t: any, i: number) => (
+												<div key={i} className="flex items-center gap-2 rounded px-2 py-1 border border-[#1a2a42] bg-[#03070d]">
+													<span className="text-[10px] text-[#dbe7ff] flex-1 truncate font-mono">{t.name}</span>
+													<span className="text-[9px] text-[#4a5f7f] tabular-nums">{(t.rows || 0).toLocaleString()}</span>
+													<span className="text-[10px] text-[#49c2ff] font-mono w-16 text-right">{t.size}</span>
+												</div>
+											))}
+										</div>
+									</div>
+									{postgresData.last_maintenance && (
+										<p className="text-[9px] text-[#4a5f7f] text-center">
+											Última mantención: <span className="font-mono text-[#7f95bb]">{new Date(postgresData.last_maintenance).toLocaleString("es-CO")}</span>
+										</p>
+									)}
+								</div>
+							)}
+
+							</div>{/* end tab content padding */}
 						</div>
 					)}
 				</div>
@@ -1610,6 +1818,16 @@ export function AgentHabitat() {
 					<span>Listening: {isListening ? "yes" : "no"}</span>
 				</div>
 			)}
+			<style>{`
+				/* Panel scrollbar — fade in on hover/scroll, slim, no white track */
+				.odi-panel { scrollbar-width: thin; scrollbar-color: transparent transparent; transition: scrollbar-color 0.4s ease; }
+				.odi-panel:hover { scrollbar-color: #1a2a42 transparent; }
+				.odi-panel::-webkit-scrollbar { width: 6px; }
+				.odi-panel::-webkit-scrollbar-track { background: transparent; }
+				.odi-panel::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; transition: background 0.4s ease; }
+				.odi-panel:hover::-webkit-scrollbar-thumb { background: rgba(73,194,255,0.18); }
+				.odi-panel::-webkit-scrollbar-thumb:hover { background: rgba(73,194,255,0.40); }
+			`}</style>
 		</main>
 	);
 }
