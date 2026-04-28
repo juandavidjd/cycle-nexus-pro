@@ -799,7 +799,15 @@ export function AgentHabitat() {
 	const showDebug = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("debug");
 
 	return (
-		<main className="min-h-screen bg-[#03070d] text-[#dbe7ff] font-sans" role="main" aria-label="LiveODI Habitat">
+		<main id="odi-main" className="min-h-screen bg-[#03070d] text-[#dbe7ff] font-sans" role="main" aria-label="LiveODI Habitat">
+			{/* OC-08-ARIA: Skip link — visible only on focus, jumps to chat input */}
+			<a
+				href="#odi-chat-input"
+				className="absolute left-4 top-4 -translate-y-20 focus:translate-y-0 focus:outline focus:outline-2 focus:outline-[#49c2ff] bg-[#0a1628] text-[#dbe7ff] px-3 py-2 rounded text-xs z-50 transition-transform"
+				style={{ position: "absolute" }}
+			>
+				Saltar a la conversación con ODI
+			</a>
 			<div className="max-w-[1200px] mx-auto min-h-screen px-4 py-5">
 
 				{/* ── Header ── */}
@@ -856,14 +864,14 @@ export function AgentHabitat() {
 									<div className="mt-2 p-2 rounded-lg border border-[#1a2a42] bg-[#0a1628] text-[10px]" role="region" aria-label="Preferencias de accesibilidad">
 										<div className="flex items-center justify-between mb-2">
 											<span className="text-[#49c2ff] font-semibold">Preferencias</span>
-											<button onClick={() => setShowAdaptarme(false)} className="text-[#4a5f7f] bg-transparent border-none cursor-pointer">&#x2715;</button>
+											<button aria-label="Cerrar panel de accesibilidad" onClick={() => setShowAdaptarme(false)} className="text-[#4a5f7f] bg-transparent border-none cursor-pointer">&#x2715;</button>
 										</div>
 										<div className="grid gap-1.5">
 											<div className="flex items-center justify-between">
 												<span className="text-[#8ca0c6]">Texto</span>
 												<div className="flex gap-1">
 													{(["normal", "large", "xlarge"] as const).map(s => (
-														<button key={s} onClick={() => updateA11y({ textSize: s })} className={`px-1.5 py-0.5 rounded ${a11yPrefs.textSize === s ? "bg-[#49c2ff22] text-[#49c2ff]" : "text-[#4a5f7f]"} cursor-pointer bg-transparent border-none`}>
+														<button key={s} aria-label={`Tamaño de texto ${s === "normal" ? "normal" : s === "large" ? "grande" : "extra grande"}`} aria-pressed={a11yPrefs.textSize === s} onClick={() => updateA11y({ textSize: s })} className={`px-1.5 py-0.5 rounded ${a11yPrefs.textSize === s ? "bg-[#49c2ff22] text-[#49c2ff]" : "text-[#4a5f7f]"} cursor-pointer bg-transparent border-none`}>
 															{s === "normal" ? "A" : s === "large" ? "A+" : "A++"}
 														</button>
 													))}
@@ -873,7 +881,7 @@ export function AgentHabitat() {
 												<span className="text-[#8ca0c6]">Contraste</span>
 												<div className="flex gap-1">
 													{(["normal", "high"] as const).map(c => (
-														<button key={c} onClick={() => updateA11y({ contrast: c })} className={`px-1.5 py-0.5 rounded ${a11yPrefs.contrast === c ? "bg-[#49c2ff22] text-[#49c2ff]" : "text-[#4a5f7f]"} cursor-pointer bg-transparent border-none`}>
+														<button key={c} aria-label={`Contraste ${c === "normal" ? "normal" : "alto"}`} aria-pressed={a11yPrefs.contrast === c} onClick={() => updateA11y({ contrast: c })} className={`px-1.5 py-0.5 rounded ${a11yPrefs.contrast === c ? "bg-[#49c2ff22] text-[#49c2ff]" : "text-[#4a5f7f]"} cursor-pointer bg-transparent border-none`}>
 															{c === "normal" ? "Normal" : "Alto"}
 														</button>
 													))}
@@ -881,14 +889,14 @@ export function AgentHabitat() {
 											</div>
 											<div className="flex items-center justify-between">
 												<span className="text-[#8ca0c6]">Vista simplificada</span>
-												<button onClick={() => updateA11y({ simplified: !a11yPrefs.simplified })} className={`px-1.5 py-0.5 rounded ${a11yPrefs.simplified ? "bg-[#49c2ff22] text-[#49c2ff]" : "text-[#4a5f7f]"} cursor-pointer bg-transparent border-none`}>
+												<button aria-label="Activar vista simplificada" aria-pressed={a11yPrefs.simplified} onClick={() => updateA11y({ simplified: !a11yPrefs.simplified })} className={`px-1.5 py-0.5 rounded ${a11yPrefs.simplified ? "bg-[#49c2ff22] text-[#49c2ff]" : "text-[#4a5f7f]"} cursor-pointer bg-transparent border-none`}>
 													{a11yPrefs.simplified ? "Si" : "No"}
 												</button>
 											</div>
 										</div>
 									</div>
 								)}
-								<button onClick={() => setShowSidebar((v) => !v)} className="mt-2 text-[10px] text-[#49c2ff] hover:text-[#9be2ff] transition-colors cursor-pointer bg-transparent border-none">
+								<button aria-label={showSidebar ? "Ocultar organismo" : "Ver organismo"} aria-expanded={showSidebar} onClick={() => setShowSidebar((v) => !v)} className="mt-2 text-[10px] text-[#49c2ff] hover:text-[#9be2ff] transition-colors cursor-pointer bg-transparent border-none">
 									{showSidebar ? "Ocultar" : "Ver organismo"}
 								</button>
 							</>
@@ -913,16 +921,16 @@ export function AgentHabitat() {
 										<span className="text-sm italic" style={{ color: interimText ? "#dbe7ff" : isListening ? "#ec4899" : "#4a5f7f" }}>
 											{interimText || (isListening ? "Te escucho..." : "Activando...")}
 										</span>
-										<button onClick={() => { stopContinuousListening(); setInputMode("text"); }}
+										<button aria-label="Cambiar a modo texto" onClick={() => { stopContinuousListening(); setInputMode("text"); }}
 											className="text-[10px] text-[#4a5f7f] bg-transparent border-none cursor-pointer hover:text-[#7f95bb]">
 											&#x2328; texto
 										</button>
 									</div>
 								) : (
 									<div className="flex gap-2">
-										<input ref={inputRef} type="text" autoComplete="off" aria-label="Mensaje para ODI" placeholder="Escribe a ODI..." value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSend()} disabled={isSending}
+										<input ref={inputRef} id="odi-chat-input" type="text" autoComplete="off" aria-label="Mensaje para ODI" placeholder="Escribe a ODI..." value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSend()} disabled={isSending}
 											className="flex-1 rounded-xl border border-[#35537c] bg-[rgba(7,18,33,0.7)] text-[#ddebff] px-4 py-3 text-sm outline-none focus:border-[#49c2ff] transition-colors disabled:opacity-50" />
-										<button onClick={() => handleSend()} disabled={isSending || !chatInput.trim()}
+										<button aria-label="Enviar mensaje a ODI" onClick={() => handleSend()} disabled={isSending || !chatInput.trim()}
 											className="px-4 py-3 rounded-xl border border-[#35537c] bg-[#49c2ff11] text-[#49c2ff] text-sm cursor-pointer hover:bg-[#49c2ff22] transition-colors disabled:opacity-30 disabled:cursor-default">
 											{isSending ? "..." : "Enviar"}
 
@@ -943,7 +951,7 @@ export function AgentHabitat() {
 											Visita #{returnContext.visit_count}
 										</span>
 									</div>
-									<button onClick={() => { returnContext?.incomplete_flows?.forEach((f: any) => dismissFlow(f.flow_id)); setShowReturnCard(false); }} className="text-xs text-[#4a5f7f] bg-transparent border-none cursor-pointer hover:text-[#7f95bb]">
+									<button aria-label="Cerrar tarjeta de bienvenida" onClick={() => { returnContext?.incomplete_flows?.forEach((f: any) => dismissFlow(f.flow_id)); setShowReturnCard(false); }} className="text-xs text-[#4a5f7f] bg-transparent border-none cursor-pointer hover:text-[#7f95bb]">
 										&#x2715;
 									</button>
 								</div>
@@ -956,7 +964,7 @@ export function AgentHabitat() {
 									<div className="mb-3">
 										<p className="text-[10px] text-[#4a5f7f] font-semibold mb-1.5">FLUJOS PENDIENTES</p>
 										{returnContext.incomplete_flows.map((f: any, i: number) => (
-											<button key={i} onClick={() => { setShowReturnCard(false); startFlowFromStep(f.flow_id, f.last_step || 0); }}
+											<button key={i} aria-label={`Continuar flujo ${f.flow_id?.replace(/_/g, " ")} desde paso ${f.last_step || 0}`} onClick={() => { setShowReturnCard(false); startFlowFromStep(f.flow_id, f.last_step || 0); }}
 												className="flex items-center justify-between w-full px-2.5 py-1.5 mt-1 rounded-lg bg-[#0b1625] border border-[#162842] cursor-pointer hover:bg-[#0f1d30] transition-colors">
 												<span className="text-xs text-[#d8e8ff]">{f.flow_id?.replace(/_/g, " ")}</span>
 												<span className="text-[10px] text-[#c4a0ff]">paso {f.last_step} &#x2192;</span>
@@ -966,12 +974,12 @@ export function AgentHabitat() {
 								)}
 								<div className="flex gap-2">
 									{returnContext.incomplete_flows?.length > 0 && (
-										<button onClick={() => { setShowReturnCard(false); const f = returnContext.incomplete_flows[0]; startFlowFromStep(f.flow_id, f.last_step || 0); }}
+										<button aria-label="Continuar flujo más reciente" onClick={() => { setShowReturnCard(false); const f = returnContext.incomplete_flows[0]; startFlowFromStep(f.flow_id, f.last_step || 0); }}
 											className="px-3 py-1.5 rounded-lg bg-[#c4a0ff15] border border-[#c4a0ff33] text-[#c4a0ff] text-xs font-semibold cursor-pointer hover:bg-[#c4a0ff22] transition-colors">
 											&#x25B6; Continuar
 										</button>
 									)}
-									<button onClick={() => { returnContext?.incomplete_flows?.forEach((f: any) => dismissFlow(f.flow_id)); setShowReturnCard(false); }}
+									<button aria-label="Empezar de nuevo, descartar flujos pendientes" onClick={() => { returnContext?.incomplete_flows?.forEach((f: any) => dismissFlow(f.flow_id)); setShowReturnCard(false); }}
 										className="px-3 py-1.5 rounded-lg bg-transparent border border-[#162842] text-[#4a5f7f] text-xs cursor-pointer hover:text-[#7f95bb] transition-colors">
 										Empezar de nuevo
 									</button>
@@ -987,10 +995,10 @@ export function AgentHabitat() {
 										{activeFlowMeta?.icon} {activeFlowMeta?.label} — paso {activeFlowStep + 1}/{activeFlowSeq.length}
 									</span>
 									<div className="flex gap-2">
-										<button onClick={advanceFlow} className="text-[10px] px-2 py-0.5 rounded border border-[#a78bfa44] text-[#a78bfa] bg-transparent cursor-pointer hover:bg-[#a78bfa11]">
+										<button aria-label={activeFlowStep >= activeFlowSeq.length - 1 ? "Cerrar flujo" : "Avanzar al siguiente paso del flujo"} onClick={advanceFlow} className="text-[10px] px-2 py-0.5 rounded border border-[#a78bfa44] text-[#a78bfa] bg-transparent cursor-pointer hover:bg-[#a78bfa11]">
 											{activeFlowStep >= activeFlowSeq.length - 1 ? "Cerrar" : "Siguiente \u2192"}
 										</button>
-										<button onClick={closeFlow} className="text-[10px] px-2 py-0.5 rounded border border-[#ff444444] text-[#ff4444] bg-transparent cursor-pointer hover:bg-[#ff444411]">\u2715</button>
+										<button aria-label="Cerrar flujo activo" onClick={closeFlow} className="text-[10px] px-2 py-0.5 rounded border border-[#ff444444] text-[#ff4444] bg-transparent cursor-pointer hover:bg-[#ff444411]">\u2715</button>
 									</div>
 								</div>
 								<div className="grid gap-1.5 max-h-[200px] overflow-y-auto">
@@ -1042,11 +1050,11 @@ export function AgentHabitat() {
 
 					{/* ── Sidebar: Flows / Manifest / Stats / Auditoría / Seguridad / PG ── */}
 					{true && (
-						<div className="odi-panel rounded-lg border border-[#1a2a42] bg-[#0a1628] overflow-y-auto relative" style={{ maxHeight: "calc(100vh - 100px)" }} role="main" aria-label="Panel del ecosistema ODI">
+						<div className="odi-panel rounded-lg border border-[#1a2a42] bg-[#0a1628] overflow-y-auto relative" style={{ maxHeight: "calc(100vh - 100px)" }} role="region" aria-label="Panel del ecosistema ODI">
 							{/* Tabs (sticky) */}
 							<div className="sticky top-0 z-20 flex gap-1 flex-wrap px-4 pt-4 pb-3 backdrop-blur-md bg-[#0a1628cc] border-b border-[#1a2a42]">
 								{(["manifest", "events", "domains", "flows", "stats", "audit", "security", "postgres"] as SideTab[]).map((t) => (
-									<button key={t} onClick={() => setSideTab(t)}
+									<button key={t} aria-label={`Pestaña ${t === "manifest" ? "Manifest" : t === "events" ? "Eventos" : t === "domains" ? "Dominios" : t === "flows" ? `Flujos (${flows.length})` : t === "stats" ? "Estadísticas" : t === "audit" ? "Auditoría" : t === "security" ? "Seguridad" : "PostgreSQL"}`} aria-pressed={sideTab === t} onClick={() => setSideTab(t)}
 										className={`text-[10px] px-2 py-1 rounded-full border cursor-pointer transition-colors ${sideTab === t ? "bg-[#49c2ff22] border-[#49c2ff44] text-[#49c2ff]" : "bg-transparent border-[#1a2a42] text-[#4a5f7f] hover:text-[#7f95bb]"}`}>
 										{t === "manifest" ? "Manifest" : t === "events" ? "Eventos" : t === "domains" ? "Dominios" : t === "flows" ? `Flujos (${flows.length})` : t === "stats" ? "Stats" : t === "audit" ? "Auditoría" : t === "security" ? "Seguridad" : "PostgreSQL"}
 									</button>
@@ -1075,7 +1083,7 @@ export function AgentHabitat() {
 												</h4>
 												<div className="grid gap-1">
 													{catFlows.map((f: any) => (
-														<button key={f.id} onClick={() => startFlow(f.id)}
+														<button key={f.id} aria-label={`Iniciar flujo ${f.label}`} onClick={() => startFlow(f.id)}
 															className="text-left rounded px-2 py-1.5 border border-[#1a2a42] bg-[#03070d] hover:bg-[#0a1628] transition-colors cursor-pointer">
 															<div className="flex items-center gap-1.5">
 																<span className="text-xs">{f.icon}</span>
