@@ -55,14 +55,51 @@ export interface ODIChatResponse {
 
 // ─── Chat ───
 
+/**
+ * Detecta el store actual desde la URL del browser.
+ * FASE 2.2 GO 2A (Deuda #34, 30 abr 2026): cuando el habitante navega
+ * /<store-code> o landing de empresa, el frontend transporta ese contexto
+ * al backend para que ChromaDB filtre por store y NO haga cross-store search.
+ *
+ * Stores conocidos en el ecosistema (subset GOVERNED_STORES gateway):
+ *   DUNA, BARA, YOKOMAR, KAIQI, DFG, JAPAN, LEO, VAISAND, IMBRA, MCLMOTOS,
+ *   ARMOTOS, VITTON, STORE
+ *
+ * Returns: store-code uppercase si la URL coincide, null si no hay contexto.
+ */
+export function detectStoreContext(): string | null {
+  if (typeof window === "undefined") return null;
+  const path = window.location.pathname.toLowerCase();
+  // Patterns: /duna, /duna/foo, /landing/duna, /tienda/duna
+  const m = path.match(/\/(?:landing\/|tienda\/|store\/)?([a-z0-9_-]+)(?:\/|$)/);
+  if (!m) return null;
+  const candidate = m[1].toUpperCase();
+  const KNOWN = new Set([
+    "DUNA", "BARA", "YOKOMAR", "KAIQI", "DFG", "JAPAN", "LEO", "VAISAND",
+    "IMBRA", "MCLMOTOS", "ARMOTOS", "VITTON", "STORE",
+  ]);
+  return KNOWN.has(candidate) ? candidate : null;
+}
+
 export async function odiChat(
   message: string,
-  sessionId?: string
+  sessionId?: string,
+  defaultStore?: string | null,
 ): Promise<ODIChatResponse> {
+  // Auto-detección: si el caller no pasó defaultStore explícito, intentar
+  // resolver desde la URL actual (Deuda #34 fix).
+  const effectiveStore =
+    defaultStore !== undefined ? defaultStore : detectStoreContext();
+
+  const body: Record<string, unknown> = { message, session_id: sessionId };
+  if (effectiveStore) {
+    body.default_store = effectiveStore;
+  }
+
   const res = await fetch(`${ODI_API}/odi/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, session_id: sessionId }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
