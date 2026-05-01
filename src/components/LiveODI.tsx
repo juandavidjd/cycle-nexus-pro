@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
+import { detectStoreContext } from "@/lib/odiApi";
 
 /*
  * LIVEODI — Habitat Real de ODI
@@ -7,6 +8,12 @@ import { useState, useEffect, useRef, useCallback } from "react";
  * HER reference: "Hello, I'm here." → conversación → detección → acción
  *
  * NO es chat. NO es dashboard. Es presencia.
+ *
+ * Camino B (Deuda #34, 30 abr → 1 may 2026): este componente NO usa odiChat()
+ * de odiApi.ts — hace fetch(CHAT_URL) directo. Para que el habitante en /<store>
+ * (ej /duna) reciba productos filtrados por su tienda, inyectamos
+ * detectStoreContext() en cada body request, idéntico patrón que odiChat()
+ * usa internamente. Refactor a odiChat completo queda como Camino A futuro.
  */
 
 const P = {
@@ -460,9 +467,18 @@ export default function LiveODI() {
 		try {
 			const headers: Record<string, string> = { "Content-Type": "application/json" };
 			if (authTokenRef.current) headers["Authorization"] = `Bearer ${authTokenRef.current}`;
+			// Camino B (Deuda #34): inyectar default_store si URL es /<store>
+			const _storeCtx = detectStoreContext();
+			const _payload: Record<string, unknown> = {
+				message: voiceText,
+				session_id: sessionRef.current,
+				mode: "commerce",
+				user_name: authUser?.name,
+			};
+			if (_storeCtx) _payload.default_store = _storeCtx;
 			const resp = await fetch(CHAT_URL, {
 				method: "POST", headers,
-				body: JSON.stringify({ message: voiceText, session_id: sessionRef.current, mode: "commerce", user_name: authUser?.name }),
+				body: JSON.stringify(_payload),
 			});
 			if (resp.ok) {
 				const data = await resp.json();
@@ -516,9 +532,18 @@ export default function LiveODI() {
 		try {
 			const headers: Record<string, string> = { "Content-Type": "application/json" };
 			if (authTokenRef.current) headers["Authorization"] = `Bearer ${authTokenRef.current}`;
+			// Camino B (Deuda #34): inyectar default_store si URL es /<store>
+			const _storeCtx = detectStoreContext();
+			const _payload: Record<string, unknown> = {
+				message: text,
+				session_id: sessionRef.current,
+				mode: "commerce",
+				user_name: authUser?.name,
+			};
+			if (_storeCtx) _payload.default_store = _storeCtx;
 			const resp = await fetch(CHAT_URL, {
 				method: "POST", headers,
-				body: JSON.stringify({ message: text, session_id: sessionRef.current, mode: "commerce", user_name: authUser?.name }),
+				body: JSON.stringify(_payload),
 			});
 			if (resp.ok) {
 				const data = await resp.json();

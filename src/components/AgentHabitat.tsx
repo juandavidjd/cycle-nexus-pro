@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { detectStoreContext } from "@/lib/odiApi";
 
 // ── Types ──
 interface AgentEvent {
@@ -385,9 +386,17 @@ export function AgentHabitat() {
 		setIsSending(true);
 		pushEvent({ event_id: `user_${Date.now()}`, ts: new Date().toISOString(), source: "agent", type: "user_message", payload: { text: msg } });
 		try {
+			// Camino B (Deuda #34): inyectar default_store si URL es /<store>
+			const _storeCtx = detectStoreContext();
+			const _payload: Record<string, unknown> = {
+				message: msg,
+				mode: "commerce",
+				session_id: sessionRef.current,
+			};
+			if (_storeCtx) _payload.default_store = _storeCtx;
 			const resp = await fetch(CHAT_URL, {
 				method: "POST", headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ message: msg, mode: "commerce", session_id: sessionRef.current }),
+				body: JSON.stringify(_payload),
 			});
 			if (resp.ok) {
 				const data = await resp.json();
