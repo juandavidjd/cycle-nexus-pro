@@ -11,6 +11,8 @@ const IS_HABITAT = typeof window !== "undefined" &&
 // Lazy load
 const LiveODI = lazy(() => import("./components/LiveODI"));
 const AgentPage = lazy(() => import("./pages/AgentHabitat"));
+const Privacy = lazy(() => import("./pages/Privacy"));
+const Terms = lazy(() => import("./pages/Terms"));
 
 // SRM wrapper — loads auth + providers only when needed
 const SRMApp = lazy(() => import("./SRMApp"));
@@ -30,6 +32,8 @@ const App = () => (
             <Routes>
               <Route path="/manager" element={<AgentPage />} />
               <Route path="/panel" element={<AgentPage />} />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
               <Route path="*" element={<LiveODI />} />
             </Routes>
           ) : (
