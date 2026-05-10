@@ -100,7 +100,7 @@ function ProductCardsEphemeral({ products, onDismiss }: { products: any[]; onDis
 		<div style={{ background: P.glass, border: `1px solid ${P.border}`, borderRadius: 16, padding: "16px 18px", backdropFilter: "blur(12px)", minWidth: 280, maxWidth: 400 }}>
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
 				<VoiceTag voice="tony" />
-				<button onClick={onDismiss} style={{ background: "transparent", border: "none", color: P.textDim, cursor: "pointer", fontSize: "0.7rem" }}>✕</button>
+				<button onClick={onDismiss} aria-label="Cerrar tarjetas de productos" style={{ background: "transparent", border: "none", color: P.textDim, cursor: "pointer", fontSize: "0.7rem" }}>✕</button>
 			</div>
 			<div style={{ display: "grid", gap: 8 }}>
 				{products.map((p: any, i: number) => (
@@ -132,7 +132,7 @@ function InfoCardEphemeral({ data, onDismiss }: { data: any; onDismiss: () => vo
 		<div style={{ background: P.glass, border: `1px solid ${P.border}`, borderRadius: 16, padding: "16px 18px", backdropFilter: "blur(12px)", minWidth: 260, maxWidth: 380 }}>
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
 				<span style={{ fontSize: "0.72rem", fontWeight: 600, color: P.glow }}>{data.title || "Info"}</span>
-				<button onClick={onDismiss} style={{ background: "transparent", border: "none", color: P.textDim, cursor: "pointer", fontSize: "0.7rem" }}>✕</button>
+				<button onClick={onDismiss} aria-label="Cerrar tarjeta de informacion" style={{ background: "transparent", border: "none", color: P.textDim, cursor: "pointer", fontSize: "0.7rem" }}>✕</button>
 			</div>
 			<p style={{ fontSize: "0.76rem", color: P.textSoft, margin: 0, lineHeight: 1.5 }}>{data.content || ""}</p>
 			{data.source && <p style={{ fontSize: "0.56rem", color: P.textFaint, marginTop: 6 }}>Fuente: {data.source}</p>}
