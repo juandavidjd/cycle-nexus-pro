@@ -382,7 +382,7 @@ export function AgentHabitat() {
 			if (odiNg.size > 0 && userNg.size > 0) {
 				let overlap = 0;
 				userNg.forEach(g => { if (odiNg.has(g)) overlap++; });
-				if (overlap / odiNg.size > 0.5) return; // echo detected, discard silently
+				if (overlap / odiNg.size > 0.7) return; // echo detected, discard silently
 			}
 		}
 		turnStateRef.current = "ASSISTANT_THINKING";
@@ -439,7 +439,7 @@ export function AgentHabitat() {
 		if (!recognition) {
 			recognition = new SR();
 			recognition.lang = "es-CO";
-			recognition.continuous = true;
+			recognition.continuous = false;
 			recognition.interimResults = true;
 			recognitionRef.current = recognition;
 		}
@@ -455,7 +455,7 @@ export function AgentHabitat() {
 				setInterimText(text);
 			} else {
 				// Interim: show as preview but use latest final if exists
-				setInterimText(latestTextRef.current ? latestTextRef.current + " " + text : text);
+				setInterimText(text);
 			}
 			// Silence timer: 2.5s after last activity, send and restart recognition
 			if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
