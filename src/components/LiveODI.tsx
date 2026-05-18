@@ -385,13 +385,14 @@ export default function LiveODI() {
 			}
 			const fullText = lastFinalIdx >= 0 ? (event.results[lastFinalIdx][0].transcript || "") : "";
 			// 1.8s silence after last result → send the final text
+			// NO rec.stop() entre frases: con continuous=true mantenemos la misma sesión SR viva
+			// para evitar el click intermitente que Chrome Android emite al re-abrir el mic stream.
+			// event.results sigue creciendo pero lastFinalIdx siempre toma SOLO el último final → no dupes.
 			silenceTimerRef.current = setTimeout(() => {
 				const text = fullText.trim();
 				if (text && text.length >= 2 && !isPlayingRef.current) {
 					if (sendRef.current) sendRef.current(text);
 				}
-				// Stop and restart for next utterance (clears event.results)
-				try { rec.stop(); } catch {}
 			}, 1800);
 		};
 		rec.onend = () => {
