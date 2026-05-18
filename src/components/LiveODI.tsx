@@ -329,8 +329,8 @@ export default function LiveODI() {
 	// TTS — declared early so useEffects can reference it
 	const speak = useCallback((text: string, voice: string = "ramona") => {
 		if (isPlayingRef.current || !text) return;
-		// Stop STT while speaking
-		try { recognitionRef.current?.stop(); } catch {}
+		// Hard-abort STT while speaking (stop() es soft, deja eventos pendientes que captan el TTS)
+		try { recognitionRef.current?.abort(); } catch {}
 		isPlayingRef.current = true;
 		setIsSpeaking(true);
 		lastOdiTextRef.current = text;
@@ -369,23 +369,24 @@ export default function LiveODI() {
 		if (!SR) return;
 		const rec = new SR();
 		rec.lang = "es-CO";
-		rec.continuous = true;
+		// One-shot mode: continuous=true en Chrome Android repite isFinal por la misma frase → texto duplicado.
+		rec.continuous = false;
 		rec.interimResults = true;
 		rec.onresult = (event: any) => {
+			// Eco-guard TTS: si Ramona habla o acaba de hablar (<800ms), descartar STT (sería eco del audio).
+			if (isPlayingRef.current || (Date.now() - ttsEndTimeRef.current) < 800) return;
 			// Reset silence timer on any result
 			if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-			// Rebuild full transcript from event.results every time (avoids accumulation bugs).
-			// Each result slot is stable; reading all finals gives the total sentence so far.
-			let fullText = "";
+			// Tomar SOLO el último isFinal (no concatenar finals duplicados que Chrome Android emite).
+			let lastFinalIdx = -1;
 			for (let i = 0; i < event.results.length; i++) {
-				if (event.results[i].isFinal) {
-					fullText += event.results[i][0].transcript;
-				}
+				if (event.results[i].isFinal) lastFinalIdx = i;
 			}
+			const fullText = lastFinalIdx >= 0 ? (event.results[lastFinalIdx][0].transcript || "") : "";
 			// 1.8s silence after last result → send the final text
 			silenceTimerRef.current = setTimeout(() => {
 				const text = fullText.trim();
-				if (text && text.length >= 2) {
+				if (text && text.length >= 2 && !isPlayingRef.current) {
 					if (sendRef.current) sendRef.current(text);
 				}
 				// Stop and restart for next utterance (clears event.results)
@@ -597,6 +598,23 @@ export default function LiveODI() {
 			fontSize: `${fontSize}rem`,
 			display: "flex", flexDirection: "column", overflow: "hidden",
 		}}>
+			{/* OC-16-A11Y: Skip link J1 ciego — primera tab key acceso directo a conversación */}
+			<a
+				href="#odi-conversation"
+				style={{
+					position: "absolute", top: 8, left: 8, zIndex: 100,
+					padding: "8px 16px", borderRadius: 8,
+					background: P.glow, color: P.void,
+					fontSize: "0.7rem", fontWeight: 600,
+					textDecoration: "none",
+					transform: "translateY(-200%)",
+					transition: "transform 0.2s",
+				}}
+				onFocus={(e) => { (e.target as HTMLElement).style.transform = "translateY(0)"; }}
+				onBlur={(e) => { (e.target as HTMLElement).style.transform = "translateY(-200%)"; }}
+			>
+				Saltar a la conversacion con ODI
+			</a>
 			{/* Header */}
 			<header role="banner" style={{ padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
 				<div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -739,7 +757,7 @@ export default function LiveODI() {
 
 				{/* Habitat — conversation */}
 				{phase === "habitat" && hasConvo && (
-					<div ref={scrollRef} role="log" aria-live="polite"
+					<div ref={scrollRef} id="odi-conversation" role="log" aria-live="polite"
 						style={{ flex: 1, width: "100%", maxWidth: 620, overflowY: "auto", display: "flex", flexDirection: "column", gap: 14, padding: "4px 0 16px" }}>
 						{msgs.map((m, i) => <Bubble key={i} data={m} isODI={m.role === "odi"} />)}
 					</div>
