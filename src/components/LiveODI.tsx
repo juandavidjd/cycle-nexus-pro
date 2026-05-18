@@ -407,21 +407,16 @@ export default function LiveODI() {
 		rec.onend = () => {
 			setIsListening(false);
 			recognitionRef.current = null;
-			// Reabrir sólo si el navegador la cerró sola (timeout) y seguimos en voz.
-			if (!isPlayingRef.current && accessModeRef.current === "voice") {
-				setTimeout(() => {
-					if (!isPlayingRef.current && !recognitionRef.current) startContinuousListen();
-				}, 500);
-			}
+			// NO auto-reabrir aquí. Chrome cierra la sesión cuando detecta silencio prolongado;
+			// reabrir automáticamente genera un chime cada vez que el navegador cierra → "suena y suena".
+			// La sesión se reabre cuando Ramona termine de hablar (turn-taking natural en speak.onended),
+			// o cuando el habitante hace tap manual al botón mic.
 		};
 		rec.onerror = (e: any) => {
 			setIsListening(false);
 			recognitionRef.current = null;
-			if (e.error !== "not-allowed" && e.error !== "service-not-allowed") {
-				setTimeout(() => {
-					if (!isPlayingRef.current && accessModeRef.current === "voice" && !recognitionRef.current) startContinuousListen();
-				}, 1000);
-			}
+			// Errores fatales: dejamos morir. El usuario reactivará con tap o el próximo TTS revivirá.
+			// (Eliminado el auto-restart en 1s por la misma razón que onend: chime loop.)
 		};
 		try { rec.start(); recognitionRef.current = rec; setIsListening(true); } catch { setIsListening(false); }
 	}, []);
