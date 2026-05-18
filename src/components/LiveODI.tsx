@@ -325,15 +325,18 @@ export default function LiveODI() {
 	const hasConvo = msgs.length > 0 && phase === "habitat";
 	const greetedRef = useRef(false);
 	const startContinuousListenRef = useRef<() => void>();
+	// STT singleton refs — declarados arriba para que speak() pueda referenciarlos.
+	const recognitionRef = useRef<any>(null);
+	const isRecActiveRef = useRef(false);
 
 	// TTS — declared early so useEffects can reference it
 	const speak = useCallback((text: string, voice: string = "ramona") => {
 		if (isPlayingRef.current || !text) return;
 		// Hard-abort STT while speaking (stop() es soft, deja eventos pendientes que captan el TTS).
-		// Limpiar la ref inmediatamente: si el TTS termina antes que el onend del abort, el guard
-		// en startContinuousListen vería la ref vieja y no reabriría la sesión.
+		// Singleton: NO nullamos la instancia — la preservamos para reusar al reabrir post-TTS.
+		// Sólo marcamos inactiva para que startContinuousListen pueda reabrirla.
 		try { recognitionRef.current?.abort(); } catch {}
-		recognitionRef.current = null;
+		isRecActiveRef.current = false;
 		isPlayingRef.current = true;
 		setIsSpeaking(true);
 		lastOdiTextRef.current = text;
@@ -357,68 +360,77 @@ export default function LiveODI() {
 		}).catch(() => { clearTimeout(timeout); isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); });
 	}, []);
 
-	// STT — sesión continua sin start/stop loop. El navegador emite un "click" cada
-	// vez que SpeechRecognition.start() se llama; mantener una sola sesión viva elimina
-	// el "suena y suena" reportado por el habitante.
-	const recognitionRef = useRef<any>(null);
+	// STT — patrón SINGLETON (AgentHabitat 0c08425). UNA sola instancia SpeechRecognition
+	// se crea con new SR() la primera vez y se reusa. El chime nativo del navegador SOLO
+	// dispara al instanciar+start por primera vez; stop/start sobre la MISMA instancia es
+	// silencioso. Esto permite escucha permanente (Chrome cierra → onend → restart) sin
+	// chime audible en cada ciclo.
+	// (recognitionRef + isRecActiveRef declarados arriba — antes de speak.)
 	const [isListening, setIsListening] = useState(false);
 	const sendRef = useRef<(text: string) => void>();
 	const lastOdiTextRef = useRef("");
 	const ttsEndTimeRef = useRef(0);
-
 	const silenceTimerRef = useRef<any>(null);
-	// Índice del primer result que aún no se ha enviado (evita re-enviar frases ya procesadas
-	// sin necesidad de stop+start con su click audible).
-	const sentBoundaryRef = useRef(0);
 
 	const startContinuousListen = useCallback(() => {
 		if (isPlayingRef.current) return;
-		// Si ya hay una sesión viva, NO arrancar otra (cada start genera click del navegador).
-		if (recognitionRef.current) return;
+		if (isRecActiveRef.current) return; // ya activa
 		const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 		if (!SR) return;
-		const rec = new SR();
-		rec.lang = "es-CO";
-		rec.continuous = true;
-		rec.interimResults = true;
-		sentBoundaryRef.current = 0;
+		// Singleton: crear la instancia UNA sola vez por sesión.
+		let rec = recognitionRef.current;
+		if (!rec) {
+			rec = new SR();
+			rec.lang = "es-CO";
+			rec.continuous = true;
+			rec.interimResults = true;
+			recognitionRef.current = rec;
+		}
+		// Handlers se re-vinculan cada vez para capturar closures frescos.
 		rec.onresult = (event: any) => {
-			// Eco-guard TTS: si Ramona habla o acaba de hablar (<800ms), descartar STT (sería eco del audio).
+			// Eco-guard TTS: si Ramona habla o acaba de hablar (<800ms), descartar (sería eco).
 			if (isPlayingRef.current || (Date.now() - ttsEndTimeRef.current) < 800) return;
 			if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-			// Solo considerar results posteriores a la última frase enviada — sin esto, los
-			// finals viejos quedan en event.results y se re-enviarían cada vez que el timer dispara.
+			// Tomar SOLO el último isFinal (Chrome Android repite finals; no concatenar).
 			let lastFinalIdx = -1;
-			for (let i = sentBoundaryRef.current; i < event.results.length; i++) {
+			for (let i = 0; i < event.results.length; i++) {
 				if (event.results[i].isFinal) lastFinalIdx = i;
 			}
-			if (lastFinalIdx < 0) return;
-			const fullText = event.results[lastFinalIdx][0].transcript || "";
+			const fullText = lastFinalIdx >= 0 ? (event.results[lastFinalIdx][0].transcript || "") : "";
 			silenceTimerRef.current = setTimeout(() => {
 				const text = fullText.trim();
 				if (text && text.length >= 2 && !isPlayingRef.current) {
 					if (sendRef.current) sendRef.current(text);
-					sentBoundaryRef.current = lastFinalIdx + 1;
 				}
-				// NO rec.stop() — la sesión sigue viva sin click audible. Si Chrome Android
-				// termina la sesión por timeout interno, onend la reabre limpiamente.
+				// stop() necesario en Chrome Android para limpiar event.results y mantener captura viva.
+				// onend dispara → restart sobre la MISMA instancia → SILENCIOSO (singleton).
+				try { rec.stop(); } catch {}
 			}, 1800);
 		};
 		rec.onend = () => {
 			setIsListening(false);
-			recognitionRef.current = null;
-			// NO auto-reabrir aquí. Chrome cierra la sesión cuando detecta silencio prolongado;
-			// reabrir automáticamente genera un chime cada vez que el navegador cierra → "suena y suena".
-			// La sesión se reabre cuando Ramona termine de hablar (turn-taking natural en speak.onended),
-			// o cuando el habitante hace tap manual al botón mic.
+			isRecActiveRef.current = false;
+			// Re-start sobre la MISMA instancia (sin new SR) → sin chime audible.
+			if (!isPlayingRef.current && accessModeRef.current === "voice") {
+				setTimeout(() => {
+					if (!isPlayingRef.current && !isRecActiveRef.current) {
+						try { rec.start(); isRecActiveRef.current = true; setIsListening(true); } catch { isRecActiveRef.current = false; }
+					}
+				}, 300);
+			}
 		};
 		rec.onerror = (e: any) => {
 			setIsListening(false);
-			recognitionRef.current = null;
-			// Errores fatales: dejamos morir. El usuario reactivará con tap o el próximo TTS revivirá.
-			// (Eliminado el auto-restart en 1s por la misma razón que onend: chime loop.)
+			isRecActiveRef.current = false;
+			if (e.error !== "not-allowed" && e.error !== "service-not-allowed") {
+				setTimeout(() => {
+					if (!isPlayingRef.current && accessModeRef.current === "voice" && !isRecActiveRef.current) {
+						try { rec.start(); isRecActiveRef.current = true; setIsListening(true); } catch { isRecActiveRef.current = false; }
+					}
+				}, 800);
+			}
 		};
-		try { rec.start(); recognitionRef.current = rec; setIsListening(true); } catch { setIsListening(false); }
+		try { rec.start(); isRecActiveRef.current = true; setIsListening(true); } catch { isRecActiveRef.current = false; setIsListening(false); }
 	}, []);
 
 	const accessModeRef = useRef(accessMode);
