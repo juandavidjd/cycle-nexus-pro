@@ -369,8 +369,9 @@ export default function LiveODI() {
 		if (!SR) return;
 		const rec = new SR();
 		rec.lang = "es-CO";
-		// One-shot mode: continuous=true en Chrome Android repite isFinal por la misma frase → texto duplicado.
-		rec.continuous = false;
+		// Continuous=true para evitar start/stop loop audible (click intermitente como cable suelto).
+		// El dedup de finals duplicados ya ocurre abajo con lastFinalIdx (tomamos solo el último).
+		rec.continuous = true;
 		rec.interimResults = true;
 		rec.onresult = (event: any) => {
 			// Eco-guard TTS: si Ramona habla o acaba de hablar (<800ms), descartar STT (sería eco del audio).
