@@ -347,7 +347,7 @@ export default function LiveODI() {
 			const url = URL.createObjectURL(blob);
 			const audio = audioRef.current || new Audio();
 			audioRef.current = audio;
-			audio.onended = () => { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); URL.revokeObjectURL(url); if (accessModeRef.current === "voice") setTimeout(() => startContinuousListenRef.current?.(), 300); };
+			audio.onended = () => { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); URL.revokeObjectURL(url); };
 			audio.onerror = () => { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); };
 			audio.src = url;
 			audio.play().catch(() => { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); });
@@ -361,60 +361,33 @@ export default function LiveODI() {
 	const lastOdiTextRef = useRef("");
 	const ttsEndTimeRef = useRef(0);
 
-	const silenceTimerRef = useRef<any>(null);
-
+	// Tap-to-talk: user toca la esfera, habla, suelta → envía. UNA sesión SR por frase.
+	// Sin auto-restart, sin loop, sin chime. Patrón restaurado de b31228b (15-abr-2026)
+	// que fue regresionado silenciosamente por f124e42f (16-abr-2026 panel metrics commit).
 	const startContinuousListen = useCallback(() => {
-		if (isPlayingRef.current) return;
+		if (isPlayingRef.current || isListening) return;
 		const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 		if (!SR) return;
 		const rec = new SR();
 		rec.lang = "es-CO";
-		// Continuous=true para evitar start/stop loop audible (click intermitente como cable suelto).
-		// El dedup de finals duplicados ya ocurre abajo con lastFinalIdx (tomamos solo el último).
-		rec.continuous = true;
-		rec.interimResults = true;
+		rec.continuous = false;
+		rec.interimResults = false;
 		rec.onresult = (event: any) => {
-			// Eco-guard TTS: si Ramona habla o acaba de hablar (<800ms), descartar STT (sería eco del audio).
-			if (isPlayingRef.current || (Date.now() - ttsEndTimeRef.current) < 800) return;
-			// Reset silence timer on any result
-			if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-			// Tomar SOLO el último isFinal (no concatenar finals duplicados que Chrome Android emite).
-			let lastFinalIdx = -1;
-			for (let i = 0; i < event.results.length; i++) {
-				if (event.results[i].isFinal) lastFinalIdx = i;
+			const text = event.results[0]?.[0]?.transcript?.trim();
+			if (!text || text.length < 2) return;
+			// Anti-echo: rechazar si overlap >50% con última respuesta ODI (eco TTS).
+			if (lastOdiTextRef.current) {
+				const tw = text.toLowerCase().split(/\s+/);
+				const ow = lastOdiTextRef.current.toLowerCase().split(/\s+/);
+				const overlap = tw.filter((w: string) => ow.includes(w)).length;
+				if (overlap / Math.max(tw.length, 1) > 0.5) return;
 			}
-			const fullText = lastFinalIdx >= 0 ? (event.results[lastFinalIdx][0].transcript || "") : "";
-			// 1.8s silence after last result → send the final text
-			silenceTimerRef.current = setTimeout(() => {
-				const text = fullText.trim();
-				if (text && text.length >= 2 && !isPlayingRef.current) {
-					if (sendRef.current) sendRef.current(text);
-				}
-				// rec.stop() restaurado: Chrome Android deja de emitir results en sesiones largas.
-				// El reset por frase mantiene captura viva. Click loop es trade-off mientras.
-				try { rec.stop(); } catch {}
-			}, 1800);
+			if (sendRef.current) sendRef.current(text);
 		};
-		rec.onend = () => {
-			setIsListening(false);
-			// Auto-restart if in voice mode and not speaking
-			if (!isPlayingRef.current && accessModeRef.current === "voice") {
-				setTimeout(() => {
-					if (!isPlayingRef.current) startContinuousListen();
-				}, 500);
-			}
-		};
-		rec.onerror = (e: any) => {
-			setIsListening(false);
-			// Restart on non-fatal errors
-			if (e.error !== "not-allowed" && e.error !== "service-not-allowed") {
-				setTimeout(() => {
-					if (!isPlayingRef.current && accessModeRef.current === "voice") startContinuousListen();
-				}, 1000);
-			}
-		};
+		rec.onend = () => setIsListening(false);
+		rec.onerror = () => setIsListening(false);
 		try { rec.start(); recognitionRef.current = rec; setIsListening(true); } catch { setIsListening(false); }
-	}, []);
+	}, [isListening]);
 
 	const accessModeRef = useRef(accessMode);
 	useEffect(() => { accessModeRef.current = accessMode; }, [accessMode]);
