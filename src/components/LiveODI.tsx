@@ -329,8 +329,11 @@ export default function LiveODI() {
 	// TTS — declared early so useEffects can reference it
 	const speak = useCallback((text: string, voice: string = "ramona") => {
 		if (isPlayingRef.current || !text) return;
-		// Hard-abort STT while speaking (stop() es soft, deja eventos pendientes que captan el TTS)
+		// Hard-abort STT while speaking (stop() es soft, deja eventos pendientes que captan el TTS).
+		// Limpiar la ref inmediatamente: si el TTS termina antes que el onend del abort, el guard
+		// en startContinuousListen vería la ref vieja y no reabriría la sesión.
 		try { recognitionRef.current?.abort(); } catch {}
+		recognitionRef.current = null;
 		isPlayingRef.current = true;
 		setIsSpeaking(true);
 		lastOdiTextRef.current = text;
@@ -354,7 +357,9 @@ export default function LiveODI() {
 		}).catch(() => { clearTimeout(timeout); isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); });
 	}, []);
 
-	// STT — tap mic to talk, release to send. No auto-restart, no loops, no chimes.
+	// STT — sesión continua sin start/stop loop. El navegador emite un "click" cada
+	// vez que SpeechRecognition.start() se llama; mantener una sola sesión viva elimina
+	// el "suena y suena" reportado por el habitante.
 	const recognitionRef = useRef<any>(null);
 	const [isListening, setIsListening] = useState(false);
 	const sendRef = useRef<(text: string) => void>();
@@ -362,54 +367,59 @@ export default function LiveODI() {
 	const ttsEndTimeRef = useRef(0);
 
 	const silenceTimerRef = useRef<any>(null);
+	// Índice del primer result que aún no se ha enviado (evita re-enviar frases ya procesadas
+	// sin necesidad de stop+start con su click audible).
+	const sentBoundaryRef = useRef(0);
 
 	const startContinuousListen = useCallback(() => {
 		if (isPlayingRef.current) return;
+		// Si ya hay una sesión viva, NO arrancar otra (cada start genera click del navegador).
+		if (recognitionRef.current) return;
 		const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 		if (!SR) return;
 		const rec = new SR();
 		rec.lang = "es-CO";
-		// Continuous=true para evitar start/stop loop audible (click intermitente como cable suelto).
-		// El dedup de finals duplicados ya ocurre abajo con lastFinalIdx (tomamos solo el último).
 		rec.continuous = true;
 		rec.interimResults = true;
+		sentBoundaryRef.current = 0;
 		rec.onresult = (event: any) => {
 			// Eco-guard TTS: si Ramona habla o acaba de hablar (<800ms), descartar STT (sería eco del audio).
 			if (isPlayingRef.current || (Date.now() - ttsEndTimeRef.current) < 800) return;
-			// Reset silence timer on any result
 			if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-			// Tomar SOLO el último isFinal (no concatenar finals duplicados que Chrome Android emite).
+			// Solo considerar results posteriores a la última frase enviada — sin esto, los
+			// finals viejos quedan en event.results y se re-enviarían cada vez que el timer dispara.
 			let lastFinalIdx = -1;
-			for (let i = 0; i < event.results.length; i++) {
+			for (let i = sentBoundaryRef.current; i < event.results.length; i++) {
 				if (event.results[i].isFinal) lastFinalIdx = i;
 			}
-			const fullText = lastFinalIdx >= 0 ? (event.results[lastFinalIdx][0].transcript || "") : "";
-			// 1.8s silence after last result → send the final text
+			if (lastFinalIdx < 0) return;
+			const fullText = event.results[lastFinalIdx][0].transcript || "";
 			silenceTimerRef.current = setTimeout(() => {
 				const text = fullText.trim();
 				if (text && text.length >= 2 && !isPlayingRef.current) {
 					if (sendRef.current) sendRef.current(text);
+					sentBoundaryRef.current = lastFinalIdx + 1;
 				}
-				// rec.stop() restaurado: Chrome Android deja de emitir results en sesiones largas.
-				// El reset por frase mantiene captura viva. Click loop es trade-off mientras.
-				try { rec.stop(); } catch {}
+				// NO rec.stop() — la sesión sigue viva sin click audible. Si Chrome Android
+				// termina la sesión por timeout interno, onend la reabre limpiamente.
 			}, 1800);
 		};
 		rec.onend = () => {
 			setIsListening(false);
-			// Auto-restart if in voice mode and not speaking
+			recognitionRef.current = null;
+			// Reabrir sólo si el navegador la cerró sola (timeout) y seguimos en voz.
 			if (!isPlayingRef.current && accessModeRef.current === "voice") {
 				setTimeout(() => {
-					if (!isPlayingRef.current) startContinuousListen();
+					if (!isPlayingRef.current && !recognitionRef.current) startContinuousListen();
 				}, 500);
 			}
 		};
 		rec.onerror = (e: any) => {
 			setIsListening(false);
-			// Restart on non-fatal errors
+			recognitionRef.current = null;
 			if (e.error !== "not-allowed" && e.error !== "service-not-allowed") {
 				setTimeout(() => {
-					if (!isPlayingRef.current && accessModeRef.current === "voice") startContinuousListen();
+					if (!isPlayingRef.current && accessModeRef.current === "voice" && !recognitionRef.current) startContinuousListen();
 				}, 1000);
 			}
 		};
