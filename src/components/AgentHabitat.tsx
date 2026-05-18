@@ -280,9 +280,10 @@ export function AgentHabitat() {
 		recentOdiPhrasesRef.current = [...recentOdiPhrasesRef.current.slice(-5), truncated.toLowerCase()];
 		lastAssistantTextRef.current = truncated.toLowerCase();
 		lastAssistantTsRef.current = Date.now();
-		// Echo prevention: pause STT while speaking
+		// Echo prevention: abort BOTH STT refs while speaking (singleton + anti-echo)
 		const wasListening = !!recognitionRef.current;
-		if (wasListening) { try { recognitionRef.current?.stop(); setIsListening(false); } catch {} }
+		if (wasListening) { try { recognitionRef.current?.abort(); setIsListening(false); isMainRecognitionActiveRef.current = false; } catch {} }
+		try { wakeRecRef.current?.abort(); } catch {}
 		// Cleanup previous audio
 		if (audioRef.current) {
 			audioRef.current.pause();
@@ -313,7 +314,8 @@ export function AgentHabitat() {
 						setTimeout(() => {
 							if (!isPlayingRef.current && turnStateRef.current === "COOLDOWN") {
 								turnStateRef.current = "USER_IDLE";
-								try { recognitionRef.current?.start(); setIsListening(true); } catch {}
+								// Singleton: restaurar flag al reabrir mic post-TTS (line 285 lo dejó en false)
+								try { recognitionRef.current?.start(); setIsListening(true); isMainRecognitionActiveRef.current = true; } catch {}
 							}
 						}, COOLDOWN_MS);
 					} else {
@@ -327,7 +329,8 @@ export function AgentHabitat() {
 						setTimeout(() => {
 							if (!isPlayingRef.current && turnStateRef.current === "COOLDOWN") {
 								turnStateRef.current = "USER_IDLE";
-								try { recognitionRef.current?.start(); setIsListening(true); } catch {}
+								// Singleton: restaurar flag al reabrir mic post-TTS (line 285 lo dejó en false)
+								try { recognitionRef.current?.start(); setIsListening(true); isMainRecognitionActiveRef.current = true; } catch {}
 							}
 						}, COOLDOWN_MS);
 					} else {
@@ -342,6 +345,7 @@ export function AgentHabitat() {
 
 	// === STT ===
 	const recognitionRef = useRef<any>(null);
+	const isMainRecognitionActiveRef = useRef(false);
 	const [isListening, setIsListening] = useState(false);
 	const [interimText, setInterimText] = useState("");
 	const greetKey = `odi_greeted_${sessionRef.current}`;
@@ -356,7 +360,7 @@ export function AgentHabitat() {
 	const turnStateRef = useRef<TurnState>("USER_IDLE");
 	const lastAssistantTextRef = useRef("");
 	const lastAssistantTsRef = useRef(0);
-	const COOLDOWN_MS = 700;
+	const COOLDOWN_MS = 500;
 	const latestTextRef = useRef("");
 
 	const handleSend = useCallback(async (text?: string) => {
@@ -430,10 +434,15 @@ export function AgentHabitat() {
 			setInputMode("text");
 			return;
 		}
-		const recognition = new SR();
-		recognition.lang = "es-CO";
-		recognition.continuous = true;
-		recognition.interimResults = true;
+		// Singleton: una sola instancia SpeechRecognition por sesión; handlers se re-vinculan abajo para capturar closures frescas
+		let recognition = recognitionRef.current;
+		if (!recognition) {
+			recognition = new SR();
+			recognition.lang = "es-CO";
+			recognition.continuous = true;
+			recognition.interimResults = true;
+			recognitionRef.current = recognition;
+		}
 		recognition.onresult = (event: any) => {
 			// OC-07 R1+R3: Block STT results during TTS or cooldown
 			if (isPlayingRef.current || turnStateRef.current === "ASSISTANT_SPEAKING" || turnStateRef.current === "COOLDOWN") return;
@@ -467,7 +476,7 @@ export function AgentHabitat() {
 				setInterimText("");
 				// Stop recognition to clear results array, onend will restart
 				try { recognition.stop(); } catch {}
-			}, 1800);
+			}, 2500);
 		};
 		recognition.onend = () => {
 			// NEVER auto-restart while TTS is playing
@@ -488,14 +497,16 @@ export function AgentHabitat() {
 			}
 			// no-speech: silently handled by onend restart — no action needed
 		};
-		try { recognition.start(); recognitionRef.current = recognition; setIsListening(true); resetIdleTimer(); } catch {}
+		// Singleton: instancia ya persistida en recognitionRef arriba; no re-asignar aquí. En catch, NO nullamos el ref (la instancia sigue válida; sólo marcamos inactivo).
+		try { recognition.start(); setIsListening(true); resetIdleTimer(); isMainRecognitionActiveRef.current = true; } catch { isMainRecognitionActiveRef.current = false; }
 	}, [handleSend, pushEvent, setInputMode, resetIdleTimer]);
 
 	const stopContinuousListening = useCallback(() => {
 		if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
 		if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
 		try { recognitionRef.current?.stop(); } catch {}
-		recognitionRef.current = null;
+		// Singleton: preservamos la instancia para reuso; sólo marcamos inactiva
+		isMainRecognitionActiveRef.current = false;
 		setIsListening(false);
 		setInterimText("");
 	}, []);
@@ -533,6 +544,8 @@ export function AgentHabitat() {
 		wake.continuous = true;
 		wake.interimResults = false;
 		wake.onresult = (event: any) => {
+			// Singleton guard: si main recognition entró activa, no procesar wake (evita doble sesión móvil)
+			if (isMainRecognitionActiveRef.current) return;
 			const last = event.results[event.results.length - 1];
 			if (!last.isFinal) return;
 			const transcript = last[0].transcript.trim().toLowerCase()
@@ -548,8 +561,13 @@ export function AgentHabitat() {
 			}
 		};
 		wake.onend = () => {
-			if (inputModeRef.current !== "voice" && wakeRecRef.current) {
-				setTimeout(() => { try { wake.start(); } catch {} }, 500);
+			if (inputModeRef.current !== "voice" && !isMainRecognitionActiveRef.current && !isPlayingRef.current && wakeRecRef.current) {
+				setTimeout(() => {
+					// Re-check al disparar: main pudo activarse o TTS pudo iniciar durante los 500ms
+					if (inputModeRef.current !== "voice" && !isMainRecognitionActiveRef.current && !isPlayingRef.current && wakeRecRef.current) {
+						try { wake.start(); } catch {}
+					}
+				}, 500);
 			}
 		};
 		wake.onerror = (e: any) => {
@@ -558,6 +576,7 @@ export function AgentHabitat() {
 				return;
 			}
 		};
+		if (isMainRecognitionActiveRef.current) { try { wake.stop(); } catch {} wakeRecRef.current = null; return; }
 		try { wake.start(); wakeRecRef.current = wake; } catch {}
 		return () => { try { wake.stop(); } catch {} wakeRecRef.current = null; };
 	}, [userHasInteracted, inputMode, startContinuousListening, setInputMode, handleSend]);
