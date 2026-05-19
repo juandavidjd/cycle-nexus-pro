@@ -372,8 +372,17 @@ export default function LiveODI() {
 	const ttsEndTimeRef = useRef(0);
 	const silenceTimerRef = useRef<any>(null);
 
-	const startContinuousListen = useCallback(() => {
-		if (isPlayingRef.current) return;
+	// Force flag: cuando el usuario presiona el botón mic, queremos que arranque
+	// SÍ O SÍ, ignorando bloqueos previos (TTS colgado, isPlayingRef orphan, etc.).
+	const startContinuousListen = useCallback((force = false) => {
+		if (!force && isPlayingRef.current) return;
+		if (force) {
+			// Limpieza defensiva: abortar audio que pueda estar colgado y limpiar refs.
+			try { audioRef.current?.pause(); } catch {}
+			isPlayingRef.current = false;
+			setIsSpeaking(false);
+			ttsEndTimeRef.current = Date.now();
+		}
 		if (isRecActiveRef.current) return; // ya activa
 		const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 		if (!SR) return;
@@ -433,7 +442,30 @@ export default function LiveODI() {
 				}, 800);
 			}
 		};
-		try { rec.start(); isRecActiveRef.current = true; setIsListening(true); } catch { isRecActiveRef.current = false; setIsListening(false); }
+		try {
+			rec.start();
+			isRecActiveRef.current = true;
+			setIsListening(true);
+		} catch (e: any) {
+			// InvalidStateError = SR ya está activa internamente aunque nuestro flag diga lo contrario.
+			// Abortar y reintentar 200ms después una sola vez.
+			if (e?.name === "InvalidStateError") {
+				try { rec.abort(); } catch {}
+				setTimeout(() => {
+					try {
+						rec.start();
+						isRecActiveRef.current = true;
+						setIsListening(true);
+					} catch {
+						isRecActiveRef.current = false;
+						setIsListening(false);
+					}
+				}, 200);
+			} else {
+				isRecActiveRef.current = false;
+				setIsListening(false);
+			}
+		}
 	}, []);
 
 	const accessModeRef = useRef(accessMode);
@@ -798,7 +830,7 @@ export default function LiveODI() {
 			{/* Voice mode — permanent mic indicator */}
 			{phase === "habitat" && accessMode === "voice" && (
 				<footer style={{ padding: "10px 16px 20px", display: "flex", justifyContent: "center" }}>
-					<button onClick={() => { if (isListening) { try { recognitionRef.current?.stop(); } catch {} } else startContinuousListen(); }}
+					<button onClick={() => { if (isListening) { try { recognitionRef.current?.stop(); } catch {} } else startContinuousListen(true); }}
 						aria-label={isListening ? "Mic activo — escuchando" : "Activar mic"}
 						style={{
 							width: 52, height: 52, borderRadius: "50%",
