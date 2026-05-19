@@ -353,7 +353,7 @@ export default function LiveODI() {
 			const url = URL.createObjectURL(blob);
 			const audio = audioRef.current || new Audio();
 			audioRef.current = audio;
-			audio.onended = () => { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); URL.revokeObjectURL(url); if (accessModeRef.current === "voice") setTimeout(() => startContinuousListenRef.current?.(), 300); };
+			audio.onended = () => { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); URL.revokeObjectURL(url); if (accessModeRef.current === "voice" && recognitionRef.current) setTimeout(() => startContinuousListenRef.current?.(), 300); };
 			audio.onerror = () => { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); };
 			audio.src = url;
 			audio.play().catch(() => { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); });
