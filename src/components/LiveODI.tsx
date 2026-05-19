@@ -405,7 +405,7 @@ export default function LiveODI() {
 				// stop() necesario en Chrome Android para limpiar event.results y mantener captura viva.
 				// onend dispara → restart sobre la MISMA instancia → SILENCIOSO (singleton).
 				try { rec.stop(); } catch {}
-			}, 1800);
+			}, 3000);
 		};
 		rec.onend = () => {
 			setIsListening(false);
