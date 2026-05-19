@@ -785,7 +785,7 @@ export default function LiveODI() {
 										setAccessMode(door.mode === "signs" ? "signs" : door.mode === "text" ? "text" : "voice");
 										localStorage.setItem("odi_a11y_mode", door.mode);
 										setPhase("habitat");
-										if (door.mode === "voice") setTimeout(() => startContinuousListen(), 800);
+										if (door.mode === "voice") setTimeout(() => startContinuousListen(true), 800);
 									}}
 										style={{ background: "transparent", border: `1px solid ${P.border}`, borderRadius: 12, color: P.textDim, fontSize: "0.65rem", cursor: "pointer", fontFamily: "inherit", padding: "12px 18px", transition: "all 0.3s", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}
 										onMouseEnter={e => { (e.target as HTMLElement).style.borderColor = P.glow + "55"; (e.target as HTMLElement).style.color = P.textSoft; }}
