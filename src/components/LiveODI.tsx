@@ -387,11 +387,11 @@ export default function LiveODI() {
 			recognitionRef.current = rec;
 		}
 		// Handlers se re-vinculan cada vez para capturar closures frescos.
-		// Conjunciones/preposiciones/artículos que indican que la idea NO terminó.
-		// Si la frase termina con uno de estos, extendemos el timer en vez de enviar.
-		const HANGING_RX = /\b(y|e|o|u|pero|sino|que|porque|pues|entonces|aunque|cuando|mientras|donde|como|si|para|con|sin|por|de|del|en|a|al|la|el|los|las|un|una|unos|unas|mi|tu|su|este|esta|estos|estas|ese|esa|esos|esas|tambi[eé]n|adem[aá]s)$/i;
-		const BASE_SILENCE = 4500;
-		const EXTENDED_SILENCE = 3000;
+		// Conjunciones REALES que indican idea incompleta (lista corta, no preposiciones comunes
+		// como "a"/"de"/"la" que aparecen en CUALQUIER frase y rompían el envío).
+		const HANGING_RX = /\b(y|pero|porque|entonces|aunque|mientras|cuando)$/i;
+		const BASE_SILENCE = 3500;
+		const EXTENDED_SILENCE = 2500;
 		const sendIfValid = (text: string) => {
 			if (text && text.length >= 2 && !isPlayingRef.current) {
 				if (sendRef.current) sendRef.current(text);
@@ -408,11 +408,18 @@ export default function LiveODI() {
 			for (let i = 0; i < event.results.length; i++) {
 				if (event.results[i].isFinal) lastFinalIdx = i;
 			}
-			const fullText = lastFinalIdx >= 0 ? (event.results[lastFinalIdx][0].transcript || "") : "";
+			// Fallback CRÍTICO: si NO hay isFinal aún (Chrome Android los emite tarde),
+			// usar el último interim. Sin esto, el timer dispara con text="" y la frase
+			// se pierde silenciosamente (rec.stop sí, sendRef NO). Este era el bug que
+			// hacía "ODI no habla" — el frontend nunca enviaba al backend.
+			let fullText = "";
+			if (lastFinalIdx >= 0) {
+				fullText = event.results[lastFinalIdx][0].transcript || "";
+			} else if (event.results.length > 0) {
+				fullText = event.results[event.results.length - 1][0].transcript || "";
+			}
 			silenceTimerRef.current = setTimeout(() => {
 				const text = fullText.trim();
-				// Si la frase termina con conjunción/preposición colgada, el arquitecto sigue
-				// elaborando. Damos un segundo período para que termine la idea.
 				const cleanTail = text.replace(/[.,;:!?¿¡]+$/, "");
 				if (cleanTail && HANGING_RX.test(cleanTail)) {
 					silenceTimerRef.current = setTimeout(() => sendIfValid(text), EXTENDED_SILENCE);
