@@ -475,14 +475,22 @@ export default function LiveODI() {
 		scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
 	}, [msgs]);
 
-	// Auto-greet on mount — Ramona speaks immediately, then show doors
-	// Delayed 1.2s to give auth validation a chance to resolve
+	// Auto-greet on mount — Ramona speaks immediately, then show doors.
+	// Bug previo: deps [speak, authUser] hacían que el effect re-corriera cuando llegaba
+	// authUser tras /auth/validate, cancelando el setTimeout original con el cleanup, y
+	// como greetedRef ya estaba en true, el saludo NUNCA se ejecutaba → phase quedaba
+	// en "greeting" para siempre (solo se veía la esfera, sin puertas, sin saludo).
+	// Fix: deps [] (corre UNA vez al mount), usar authUserRef que se actualiza en otro
+	// effect, y setear greetedRef DENTRO del callback (no antes) para evitar bloqueo
+	// si por alguna razón el effect intentara correr de nuevo.
+	const authUserRef = useRef<{ name?: string; email?: string } | null>(null);
+	useEffect(() => { authUserRef.current = authUser; }, [authUser]);
 	useEffect(() => {
-		if (greetedRef.current) return;
-		greetedRef.current = true;
 		const timer = setTimeout(() => {
+			if (greetedRef.current) return;
+			greetedRef.current = true;
 			const ref = referrerRef.current;
-			const firstName = authUser?.name?.split(" ")[0];
+			const firstName = authUserRef.current?.name?.split(" ")[0];
 			let greeting: string;
 			if (firstName) {
 				greeting = `Hola ${firstName}. Te reconozco. Bienvenido de vuelta.`;
@@ -497,7 +505,8 @@ export default function LiveODI() {
 			setTimeout(() => setPhase("doors"), 600);
 		}, 1200);
 		return () => clearTimeout(timer);
-	}, [speak, authUser]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
 
 	// Send message to Chat API
 	const sendText = useCallback(async (voiceText: string) => {
