@@ -387,6 +387,18 @@ export default function LiveODI() {
 			recognitionRef.current = rec;
 		}
 		// Handlers se re-vinculan cada vez para capturar closures frescos.
+		// Conjunciones/preposiciones/artículos que indican que la idea NO terminó.
+		// Si la frase termina con uno de estos, extendemos el timer en vez de enviar.
+		const HANGING_RX = /\b(y|e|o|u|pero|sino|que|porque|pues|entonces|aunque|cuando|mientras|donde|como|si|para|con|sin|por|de|del|en|a|al|la|el|los|las|un|una|unos|unas|mi|tu|su|este|esta|estos|estas|ese|esa|esos|esas|tambi[eé]n|adem[aá]s)$/i;
+		const BASE_SILENCE = 4500;
+		const EXTENDED_SILENCE = 3000;
+		const sendIfValid = (text: string) => {
+			if (text && text.length >= 2 && !isPlayingRef.current) {
+				if (sendRef.current) sendRef.current(text);
+			}
+			// stop() necesario en Chrome Android para limpiar event.results y mantener captura viva.
+			try { rec.stop(); } catch {}
+		};
 		rec.onresult = (event: any) => {
 			// Eco-guard TTS: si Ramona habla o acaba de hablar (<800ms), descartar (sería eco).
 			if (isPlayingRef.current || (Date.now() - ttsEndTimeRef.current) < 800) return;
@@ -399,13 +411,15 @@ export default function LiveODI() {
 			const fullText = lastFinalIdx >= 0 ? (event.results[lastFinalIdx][0].transcript || "") : "";
 			silenceTimerRef.current = setTimeout(() => {
 				const text = fullText.trim();
-				if (text && text.length >= 2 && !isPlayingRef.current) {
-					if (sendRef.current) sendRef.current(text);
+				// Si la frase termina con conjunción/preposición colgada, el arquitecto sigue
+				// elaborando. Damos un segundo período para que termine la idea.
+				const cleanTail = text.replace(/[.,;:!?¿¡]+$/, "");
+				if (cleanTail && HANGING_RX.test(cleanTail)) {
+					silenceTimerRef.current = setTimeout(() => sendIfValid(text), EXTENDED_SILENCE);
+				} else {
+					sendIfValid(text);
 				}
-				// stop() necesario en Chrome Android para limpiar event.results y mantener captura viva.
-				// onend dispara → restart sobre la MISMA instancia → SILENCIOSO (singleton).
-				try { rec.stop(); } catch {}
-			}, 3000);
+			}, BASE_SILENCE);
 		};
 		rec.onend = () => {
 			setIsListening(false);
