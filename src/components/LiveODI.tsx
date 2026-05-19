@@ -475,11 +475,11 @@ export default function LiveODI() {
 			const firstName = authUserRef.current?.name?.split(" ")[0];
 			let greeting: string;
 			if (firstName) {
-				greeting = `Hola ${firstName}. Te reconozco. Bienvenido de vuelta.`;
+				greeting = `Hola ${firstName}.`;
 			} else if (ref) {
-				greeting = `Hola. ${ref} me habló de ti. Bienvenido.`;
+				greeting = `Hola. ${ref} me habló de ti.`;
 			} else {
-				greeting = "Hola. Estoy aquí. Bienvenido.";
+				greeting = "Hola.";
 			}
 			setMsgs([{ role: "odi", text: greeting, voice: "ramona", mode: "presence" }]);
 			speak(greeting, "ramona");
