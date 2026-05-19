@@ -408,7 +408,15 @@ export default function LiveODI() {
 			for (let i = 0; i < event.results.length; i++) {
 				if (event.results[i].isFinal) lastFinalIdx = i;
 			}
-			const fullText = lastFinalIdx >= 0 ? (event.results[lastFinalIdx][0].transcript || "") : "";
+			// Fallback al último interim si Chrome Android no emitió isFinal antes del timer.
+			// Sin esto la frase se pierde silenciosamente: text="" → sendRef no se llama,
+			// pero rec.stop() sí dispara → bucle silencioso (mic dice "escuchando" pero nada llega).
+			let fullText = "";
+			if (lastFinalIdx >= 0) {
+				fullText = event.results[lastFinalIdx][0].transcript || "";
+			} else if (event.results.length > 0) {
+				fullText = event.results[event.results.length - 1][0].transcript || "";
+			}
 			silenceTimerRef.current = setTimeout(() => {
 				const text = fullText.trim();
 				if (text && text.length >= 2 && !isPlayingRef.current) {
