@@ -387,18 +387,9 @@ export default function LiveODI() {
 			recognitionRef.current = rec;
 		}
 		// Handlers se re-vinculan cada vez para capturar closures frescos.
-		// Conjunciones REALES que indican idea incompleta (lista corta, no preposiciones comunes
-		// como "a"/"de"/"la" que aparecen en CUALQUIER frase y rompían el envío).
-		const HANGING_RX = /\b(y|pero|porque|entonces|aunque|mientras|cuando)$/i;
-		const BASE_SILENCE = 3500;
-		const EXTENDED_SILENCE = 2500;
-		const sendIfValid = (text: string) => {
-			if (text && text.length >= 2 && !isPlayingRef.current) {
-				if (sendRef.current) sendRef.current(text);
-			}
-			// stop() necesario en Chrome Android para limpiar event.results y mantener captura viva.
-			try { rec.stop(); } catch {}
-		};
+		// VOLVIENDO a la versión que funcionaba (b429b1d singleton STT), con timer ampliado
+		// de 1800ms a 2500ms para no cortar a media frase. Sin lógicas de conjunción ni
+		// fallback interim (introducían bugs que rompían captura en celular).
 		rec.onresult = (event: any) => {
 			// Eco-guard TTS: si Ramona habla o acaba de hablar (<800ms), descartar (sería eco).
 			if (isPlayingRef.current || (Date.now() - ttsEndTimeRef.current) < 800) return;
@@ -408,25 +399,16 @@ export default function LiveODI() {
 			for (let i = 0; i < event.results.length; i++) {
 				if (event.results[i].isFinal) lastFinalIdx = i;
 			}
-			// Fallback CRÍTICO: si NO hay isFinal aún (Chrome Android los emite tarde),
-			// usar el último interim. Sin esto, el timer dispara con text="" y la frase
-			// se pierde silenciosamente (rec.stop sí, sendRef NO). Este era el bug que
-			// hacía "ODI no habla" — el frontend nunca enviaba al backend.
-			let fullText = "";
-			if (lastFinalIdx >= 0) {
-				fullText = event.results[lastFinalIdx][0].transcript || "";
-			} else if (event.results.length > 0) {
-				fullText = event.results[event.results.length - 1][0].transcript || "";
-			}
+			const fullText = lastFinalIdx >= 0 ? (event.results[lastFinalIdx][0].transcript || "") : "";
 			silenceTimerRef.current = setTimeout(() => {
 				const text = fullText.trim();
-				const cleanTail = text.replace(/[.,;:!?¿¡]+$/, "");
-				if (cleanTail && HANGING_RX.test(cleanTail)) {
-					silenceTimerRef.current = setTimeout(() => sendIfValid(text), EXTENDED_SILENCE);
-				} else {
-					sendIfValid(text);
+				if (text && text.length >= 2 && !isPlayingRef.current) {
+					if (sendRef.current) sendRef.current(text);
 				}
-			}, BASE_SILENCE);
+				// stop() necesario en Chrome Android para limpiar event.results y mantener captura viva.
+				// onend dispara → restart sobre la MISMA instancia → SILENCIOSO (singleton).
+				try { rec.stop(); } catch {}
+			}, 2500);
 		};
 		rec.onend = () => {
 			setIsListening(false);
