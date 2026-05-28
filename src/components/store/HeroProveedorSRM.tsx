@@ -188,18 +188,31 @@ export function HeroProveedorSRM({ client, profile }: HeroProveedorSRMProps) {
                 palette={palette}
               />
               <div className="flex flex-1 flex-col gap-3">
-                {/* Badges tipo + grade honesto */}
+                {/* Badges tipo + grade honesto.
+                    Regla #46 Ciclo 21: si client.type es null/undefined/vacío,
+                    renderizar fallback gris "Tipo no verificado" — NUNCA usar
+                    "Importador" ni cualquier categoría como default genérico. */}
                 <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold"
-                    style={{
-                      backgroundColor: `${palette.primary}30`,
-                      color: palette.primary,
-                    }}
-                  >
-                    <Users className="h-3.5 w-3.5" />
-                    {client.type}
-                  </span>
+                  {client.type ? (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold"
+                      style={{
+                        backgroundColor: `${palette.primary}30`,
+                        color: palette.primary,
+                      }}
+                    >
+                      <Users className="h-3.5 w-3.5" />
+                      {client.type}
+                    </span>
+                  ) : (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full border border-steel-600 bg-steel-700/40 px-3 py-1 text-xs font-semibold text-steel-300"
+                      aria-label="Tipo de empresa pendiente de verificación"
+                    >
+                      <Users className="h-3.5 w-3.5" />
+                      Tipo no verificado
+                    </span>
+                  )}
                   <span
                     className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${
                       grade.tone === "certified"

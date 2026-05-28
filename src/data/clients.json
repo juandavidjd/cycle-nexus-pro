@@ -38,7 +38,7 @@
   {
     "id": "dfg",
     "name": "DFG",
-    "type": "Importador",
+    "type": "Distribuidor",
     "logo": "/logos/dfg.png",
     "palette": {
       "primary": "#111111",
@@ -50,7 +50,7 @@
   {
     "id": "duna",
     "name": "Duna",
-    "type": "Importador",
+    "type": "Distribuidor",
     "logo": "/logos/duna.png",
     "palette": {
       "primary": "#0077B6",
@@ -62,7 +62,7 @@
   {
     "id": "imbra",
     "name": "Imbra",
-    "type": "Importador",
+    "type": "Fabricante",
     "logo": "/logos/imbra.png",
     "palette": {
       "primary": "#6C63FF",
@@ -74,7 +74,7 @@
   {
     "id": "japan",
     "name": "Japan",
-    "type": "Fabricante",
+    "type": "Distribuidor",
     "logo": "/logos/japan.png",
     "palette": {
       "primary": "#E3001B",
@@ -98,7 +98,7 @@
   {
     "id": "store",
     "name": "Store",
-    "type": "Almacen",
+    "type": "Distribuidor",
     "logo": "/logos/store.png",
     "palette": {
       "primary": "#0096C7",
@@ -134,7 +134,7 @@
   {
     "id": "vitton",
     "name": "Vitton",
-    "type": "Almacen",
+    "type": "Distribuidor",
     "logo": "/logos/vitton.png",
     "palette": {
       "primary": "#8B4513",
@@ -146,7 +146,7 @@
   {
     "id": "mclmotos",
     "name": "MclMotos",
-    "type": "Almacen",
+    "type": "Distribuidor",
     "logo": "/logos/mclmotos.png",
     "palette": {
       "primary": "#1E90FF",
@@ -158,7 +158,7 @@
   {
     "id": "cbi",
     "name": "CBI",
-    "type": "Importador",
+    "type": "Distribuidor",
     "logo": "/logos/cbi.png",
     "palette": {
       "primary": "#228B22",
@@ -182,7 +182,7 @@
   {
     "id": "darrow",
     "name": "Darrow",
-    "type": "Distribuidor",
+    "type": "Fabricante",
     "logo": "/logos/darrow.png",
     "palette": {
       "primary": "#1B3A5C",
