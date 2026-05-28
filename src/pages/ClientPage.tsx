@@ -1,6 +1,6 @@
 import { useParams, Navigate } from "react-router-dom";
 import { NavigationHeader } from "@/components/NavigationHeader";
-import { FooterSRM } from "@/components/FooterSRM";
+import { FooterEcosistemaSRM } from "@/components/FooterEcosistemaSRM";
 import { ClientLanding } from "@/components/ClientLanding";
 import { Client } from "@/types/client";
 import clientsData from "@/data/clients.json";
@@ -22,7 +22,7 @@ const ClientPage = () => {
     <div className="min-h-screen flex flex-col bg-background">
       <NavigationHeader />
       <ClientLanding client={client} />
-      <FooterSRM />
+      <FooterEcosistemaSRM />
     </div>
   );
 };
