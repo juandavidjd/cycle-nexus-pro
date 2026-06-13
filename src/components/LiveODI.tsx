@@ -38,6 +38,19 @@ function genCorrelationId(): string {
 	return `corr_browser_${t}_${r}`;
 }
 
+// 4F.2RR · firma jdamg-2026-06-13-browser-voice-granular-telemetry-v1
+// Genera voice_session_id estable a lo largo de la sesión browser y voice_turn_id por turno.
+function genVoiceTurnId(): string {
+	const t = Date.now().toString(36);
+	const r = Math.random().toString(36).slice(2, 8);
+	return `vt_browser_${t}_${r}`;
+}
+function genVoiceSessionId(): string {
+	const t = Date.now().toString(36);
+	const r = Math.random().toString(36).slice(2, 8);
+	return `vs_browser_${t}_${r}`;
+}
+
 // Emite envelope post-turno sin bloquear UI · fire-and-forget
 async function emitTelemetry(envelope: Record<string, unknown>): Promise<void> {
 	try {
@@ -363,6 +376,18 @@ export default function LiveODI() {
 	const sessionRef = useRef(typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `s_${Date.now()}`);
 	const audioRef = useRef<HTMLAudioElement | null>(null);
 	const isPlayingRef = useRef(false);
+	// 4F.2RR · voice_session_id estable durante toda la sesión browser
+	// firma jdamg-2026-06-13-browser-voice-granular-telemetry-v1
+	const voiceSessionRef = useRef<string | null>(null);
+	// Latencias TTS (capturadas en speak)
+	const ttsStartRef = useRef<number | null>(null);
+	const ttsLastLatencyRef = useRef<number | null>(null);
+	// Latencia STT (capturada en onresult del SpeechRecognition · fallback null)
+	const sttLastLatencyRef = useRef<number | null>(null);
+	function ensureVoiceSessionId(): string {
+		if (!voiceSessionRef.current) voiceSessionRef.current = genVoiceSessionId();
+		return voiceSessionRef.current;
+	}
 	const hasConvo = msgs.length > 0 && phase === "habitat";
 	const greetedRef = useRef(false);
 	const startContinuousListenRef = useRef<(force?: boolean) => void>();
@@ -381,6 +406,8 @@ export default function LiveODI() {
 		isPlayingRef.current = true;
 		setIsSpeaking(true);
 		lastOdiTextRef.current = text;
+		// 4F.2RR · capturar latencia TTS desde inicio del fetch hasta audio listo
+		ttsStartRef.current = Date.now();
 		// Non-blocking fetch with 8s timeout
 		const ctrl = new AbortController();
 		const timeout = setTimeout(() => ctrl.abort(), 8000);
@@ -391,6 +418,8 @@ export default function LiveODI() {
 		}).then(r => { clearTimeout(timeout); return r.ok ? r.blob() : null; })
 		.then(blob => {
 			if (!blob) { isPlayingRef.current = false; setIsSpeaking(false); ttsEndTimeRef.current = Date.now(); return; }
+			// 4F.2RR · TTS roundtrip latency
+			if (ttsStartRef.current) ttsLastLatencyRef.current = Date.now() - ttsStartRef.current;
 			const url = URL.createObjectURL(blob);
 			const audio = audioRef.current || new Audio();
 			audioRef.current = audio;
@@ -440,6 +469,10 @@ export default function LiveODI() {
 		// VOLVIENDO a la versión que funcionaba (b429b1d singleton STT), con timer ampliado
 		// de 1800ms a 2500ms para no cortar a media frase. Sin lógicas de conjunción ni
 		// fallback interim (introducían bugs que rompían captura en celular).
+		// 4F.2RR · capturar inicio de habla para calcular STT latency
+		rec.onspeechstart = () => {
+			(rec as any)._sttStart = Date.now();
+		};
 		rec.onresult = (event: any) => {
 			// Eco-guard TTS: si Ramona habla o acaba de hablar (<800ms), descartar (sería eco).
 			if (isPlayingRef.current || (Date.now() - ttsEndTimeRef.current) < 800) return;
@@ -457,6 +490,12 @@ export default function LiveODI() {
 				fullText = event.results[lastFinalIdx][0].transcript || "";
 			} else if (event.results.length > 0) {
 				fullText = event.results[event.results.length - 1][0].transcript || "";
+			}
+			// 4F.2RR · STT latency (speechstart → result final). null si onspeechstart no disparó.
+			const sttStart = (rec as any)._sttStart;
+			if (sttStart) {
+				sttLastLatencyRef.current = Date.now() - sttStart;
+				(rec as any)._sttStart = null;
 			}
 			silenceTimerRef.current = setTimeout(() => {
 				const text = fullText.trim();
@@ -615,19 +654,27 @@ export default function LiveODI() {
 				if (visual && visual.type) { setEphProducts(data.productos || []); setEphemeral(visual); }
 				if (accessMode !== "text" && accessMode !== "signs") { speak(responseText, voice); }
 				// 4F.2 · telemetría runtime · post-turno · cero efectos secundarios
+				// 4F.2RR · envelope granular · voice_session_id + voice_turn_id + latencias
+				const _isVoice = !(accessMode === "text" || accessMode === "signs");
 				emitTelemetry({
 					correlation_id: correlationId,
 					conversation_id: sessionRef.current,
 					turn_id: turnId,
-					channel: "voice",
+					voice_session_id: _isVoice ? ensureVoiceSessionId() : undefined,
+					voice_turn_id: _isVoice ? genVoiceTurnId() : undefined,
+					channel: _isVoice ? "voice" : "text",
 					actor: "architect",
 					ui_actor: voice,
 					persona_mode: lockedMode,
-					route_used: accessMode === "text" || accessMode === "signs" ? "route_text_response" : "route_browser_speech_to_text",
+					route_used: _isVoice ? "route_browser_speech_to_text" : "route_text_response",
 					input_text: voiceText,
 					normalized_text: voiceText.toLowerCase(),
 					stt_provider: "browser_web_speech",
-					tts_provider: accessMode !== "text" && accessMode !== "signs" ? "elevenlabs" : undefined,
+					tts_provider: _isVoice ? "elevenlabs" : undefined,
+					stt_latency_ms: sttLastLatencyRef.current,
+					tts_latency_ms: _isVoice ? ttsLastLatencyRef.current : null,
+					stt_status: sttLastLatencyRef.current != null ? "ok" : "not_measured",
+					tts_status: _isVoice ? (ttsLastLatencyRef.current != null ? "ok" : "not_measured") : undefined,
 					task_created: false,
 					action_executed: false,
 				});
@@ -635,10 +682,13 @@ export default function LiveODI() {
 		} catch {
 			setMsgs(prev => [...prev, { role: "odi", text: "No logré completar la conexión en este intento. La interfaz de texto sigue disponible. ¿Quieres reintentar, o prefieres que revise el estado de la ruta?", voice: "ramona", mode: "care" }]);
 			// 4F.2 · telemetría también en fallback · marca la falla sin bloquear UI
+			// 4F.2RR · fallback envelope · también con voice_session_id para tracear sesión completa
 			emitTelemetry({
 				correlation_id: correlationId,
 				conversation_id: sessionRef.current,
 				turn_id: turnId,
+				voice_session_id: ensureVoiceSessionId(),
+				voice_turn_id: genVoiceTurnId(),
 				channel: "voice",
 				actor: "architect",
 				ui_actor: "ramona",
@@ -646,6 +696,9 @@ export default function LiveODI() {
 				route_used: "route_text_fallback",
 				input_text: voiceText,
 				fallback_triggered: true,
+				stt_provider: "browser_web_speech",
+				stt_latency_ms: sttLastLatencyRef.current,
+				stt_status: sttLastLatencyRef.current != null ? "ok" : "not_measured",
 				task_created: false,
 				action_executed: false,
 			});
