@@ -86,6 +86,50 @@ export function normalizeOdiAcronym(raw: string): SttNormalizationResult {
 	};
 }
 
+// 5C-B2 · TRANSCRIPT_REVIEW antes de chat_api · firma jdamg-2026-06-13-stt-transcript-review-before-chat-v1
+// Decide si la voz necesita revisión humana del transcript antes de enviarse al chat_api.
+// REGLA CENTRAL: confirmar transcript NO es firma · NO autoriza ejecución mutativa.
+const REVIEW_TRIGGER_WORDS = /\b(c[oó]digo|firm[oa]|orden|carril|ejecuta|ejecutar|publica|publicar|borr[ao]|borrar|tienda|paga|pagar|cierr[ao]|elimina|eliminar)\b/i;
+const REVIEW_SUSPECT_PATTERNS = [
+	/^hoy\s+prueba/i,
+	/^oye\s+prueba/i,
+	/desplazamiento\s+c[oó]digo/i,
+	/de\s+un\s+viva/i,
+];
+export function requiresTranscriptReview(opts: {
+	stt_text_raw: string;
+	normalized_text: string;
+	normalization_applied: boolean;
+	normalization_confidence: number;
+	route_used: string;
+}): { required: boolean; reason: string | null } {
+	const raw = opts.stt_text_raw || "";
+	if (!raw) return { required: false, reason: null };
+	if (opts.route_used !== "route_browser_speech_to_text") return { required: false, reason: null };
+	// 1. normalización aplicó
+	if (opts.normalization_applied) {
+		return { required: true, reason: "normalization_applied" };
+	}
+	// 2. confianza baja
+	if (opts.normalization_confidence > 0 && opts.normalization_confidence < 0.95) {
+		return { required: true, reason: "normalization_confidence_low" };
+	}
+	// 3. raw distinto del normalized (defensive)
+	if (raw !== opts.normalized_text) {
+		return { required: true, reason: "raw_diverges_from_normalized" };
+	}
+	// 4. frase contiene palabras de riesgo
+	if (REVIEW_TRIGGER_WORDS.test(raw)) {
+		return { required: true, reason: "high_risk_keywords_present" };
+	}
+	// 5. patrón sospechoso STT degradado
+	for (const p of REVIEW_SUSPECT_PATTERNS) {
+		if (p.test(raw)) return { required: true, reason: "suspect_degraded_stt_pattern" };
+	}
+	// Caso por defecto: saludos simples y consultas no peligrosas pasan sin revisar
+	return { required: false, reason: null };
+}
+
 // 4F.2RR · firma jdamg-2026-06-13-browser-voice-granular-telemetry-v1
 // Genera voice_session_id estable a lo largo de la sesión browser y voice_turn_id por turno.
 function genVoiceTurnId(): string {
@@ -658,6 +702,17 @@ export default function LiveODI() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
+	// 5C-B2 · pendingReview state · firma jdamg-2026-06-13-stt-transcript-review-before-chat-v1
+	const [pendingReview, setPendingReview] = useState<null | {
+		correlationId: string;
+		turnId: string;
+		voiceText: string;
+		normResult: SttNormalizationResult;
+		reviewReason: string;
+		startedAt: number;
+		editing: string;
+	}>(null);
+
 	// Send message to Chat API
 	const sendText = useCallback(async (voiceText: string) => {
 		if (!voiceText || isSending) return;
@@ -666,6 +721,61 @@ export default function LiveODI() {
 		// 4F.2 · correlation id por turno
 		const correlationId = genCorrelationId();
 		const turnId = `turn_${turnRef.current}`;
+		// 5C-B2 · calcular normalización + review ANTES de pintar al usuario
+		const _isVoiceCh = !(accessMode === "text" || accessMode === "signs");
+		const _routeUsed = _isVoiceCh ? "route_browser_speech_to_text" : "route_text_response";
+		const _norm = normalizeOdiAcronym(voiceText);
+		const _review = requiresTranscriptReview({
+			stt_text_raw: _norm.stt_text_raw,
+			normalized_text: _norm.normalized_text,
+			normalization_applied: _norm.normalization_applied,
+			normalization_confidence: _norm.normalization_confidence,
+			route_used: _routeUsed,
+		});
+		// Si el voiceText viene del path de texto (sendForm de teclado) NUNCA review
+		const _shouldReview = _isVoiceCh && _review.required;
+		if (_shouldReview) {
+			// Mostrar burbuja con el RAW (lo que escuchamos)
+			setMsgs(prev => [...prev, { role: "user", text: voiceText }]);
+			setPendingReview({
+				correlationId, turnId, voiceText, normResult: _norm,
+				reviewReason: _review.reason || "unknown",
+				startedAt: Date.now(),
+				editing: _norm.normalization_applied ? _norm.normalized_text : voiceText,
+			});
+			// 5C-B2 · telemetría · marca que la revisión fue mostrada pero AÚN no se decidió
+			emitTelemetry({
+				correlation_id: correlationId,
+				conversation_id: sessionRef.current,
+				turn_id: turnId,
+				voice_session_id: _isVoiceCh ? ensureVoiceSessionId() : undefined,
+				voice_turn_id: _isVoiceCh ? genVoiceTurnId() : undefined,
+				channel: _isVoiceCh ? "voice" : "text",
+				actor: "architect",
+				ui_actor: "ramona",
+				persona_mode: "presence",
+				route_used: "route_browser_speech_to_text_review",
+				input_text: voiceText,
+				stt_text_raw: _norm.stt_text_raw,
+				normalized_text: _norm.normalized_text,
+				normalization_applied: _norm.normalization_applied,
+				normalization_rule: _norm.normalization_rule,
+				normalization_confidence: _norm.normalization_confidence,
+				review_required: true,
+				review_reason: _review.reason,
+				review_displayed: true,
+				review_action: "pending",
+				stt_provider: "browser_web_speech",
+				stt_latency_ms: sttLastLatencyRef.current,
+				stt_status: sttLastLatencyRef.current != null ? "ok" : "not_measured",
+				task_created: false,
+				action_executed: false,
+				voice_signature_accepted: false,
+			});
+			setIsSending(false);
+			return;
+		}
+		// Path normal: no requiere review · envía directo
 		setMsgs(prev => [...prev, { role: "user", text: voiceText }]);
 		try {
 			const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -704,8 +814,8 @@ export default function LiveODI() {
 				// 4F.2 · telemetría runtime · post-turno · cero efectos secundarios
 				// 4F.2RR · envelope granular · voice_session_id + voice_turn_id + latencias
 				// 5B · normalizador STT_ACRONYM_ODI · stt_text_raw intacto · normalized_text corregido
+				// 5C-B2 · path sin review · review_required=false · sent_to_chat_text=voiceText raw
 				const _isVoice = !(accessMode === "text" || accessMode === "signs");
-				const _norm = normalizeOdiAcronym(voiceText);
 				emitTelemetry({
 					correlation_id: correlationId,
 					conversation_id: sessionRef.current,
@@ -723,6 +833,10 @@ export default function LiveODI() {
 					normalization_applied: _norm.normalization_applied,
 					normalization_rule: _norm.normalization_rule,
 					normalization_confidence: _norm.normalization_confidence,
+					review_required: false,
+					review_displayed: false,
+					review_action: "not_required",
+					sent_to_chat_text: voiceText,
 					stt_provider: "browser_web_speech",
 					tts_provider: _isVoice ? "elevenlabs" : undefined,
 					stt_latency_ms: sttLastLatencyRef.current,
@@ -759,6 +873,113 @@ export default function LiveODI() {
 		}
 		setIsSending(false);
 	}, [isSending, speak, accessMode, authUser]);
+
+	// 5C-B2 · dispatchAfterReview: el usuario confirma/edita/cancela el transcript.
+	// CRITICAL: confirmar transcript ≠ firma · NO autoriza ejecución mutativa.
+	const dispatchAfterReview = useCallback(async (
+		action: "confirmed" | "edited" | "cancelled",
+		finalText: string
+	) => {
+		const review = pendingReview;
+		if (!review) return;
+		setPendingReview(null);
+		const { correlationId, turnId, voiceText, normResult } = review;
+		const _isVoice = !(accessMode === "text" || accessMode === "signs");
+		if (action === "cancelled") {
+			// No envía a chat_api · solo registra la cancelación en telemetría
+			setMsgs(prev => [...prev, { role: "odi", text: "Cancelado. No envié nada al Hábitat. Cuando quieras intentamos de nuevo.", voice: "ramona", mode: "care" }]);
+			emitTelemetry({
+				correlation_id: correlationId,
+				conversation_id: sessionRef.current,
+				turn_id: turnId,
+				voice_session_id: _isVoice ? ensureVoiceSessionId() : undefined,
+				voice_turn_id: _isVoice ? genVoiceTurnId() : undefined,
+				channel: _isVoice ? "voice" : "text",
+				actor: "architect",
+				ui_actor: "ramona",
+				persona_mode: "care",
+				route_used: "route_browser_speech_to_text_review_cancelled",
+				input_text: voiceText,
+				stt_text_raw: normResult.stt_text_raw,
+				normalized_text: normResult.normalized_text,
+				normalization_applied: normResult.normalization_applied,
+				normalization_rule: normResult.normalization_rule,
+				normalization_confidence: normResult.normalization_confidence,
+				review_required: true,
+				review_reason: review.reviewReason,
+				review_displayed: true,
+				review_action: "cancelled",
+				reviewed_text: null,
+				sent_to_chat_text: null,
+				stt_provider: "browser_web_speech",
+				task_created: false,
+				action_executed: false,
+				voice_signature_accepted: false,
+			});
+			return;
+		}
+		setIsSending(true);
+		const reviewedText = action === "edited" ? finalText : (normResult.normalization_applied ? normResult.normalized_text : voiceText);
+		try {
+			const headers: Record<string, string> = { "Content-Type": "application/json" };
+			if (authTokenRef.current) headers["Authorization"] = `Bearer ${authTokenRef.current}`;
+			const _storeCtx = detectStoreContext();
+			const _payload: Record<string, unknown> = {
+				message: reviewedText, session_id: sessionRef.current,
+				mode: "presence", user_name: authUser?.name,
+			};
+			if (_storeCtx) _payload.default_store = _storeCtx;
+			const resp = await fetch(CHAT_URL, { method: "POST", headers, body: JSON.stringify(_payload) });
+			if (resp.ok) {
+				const data = await resp.json();
+				const responseText = data.response || "";
+				const voice = data.voice || "ramona";
+				const mode = data.mode || "presence";
+				const lockedMode = lockPersonaMode(voice, mode) || mode;
+				setOrbColor(voice === "tony" ? P.glow : P.spirit);
+				setMsgs(prev => [...prev, { role: "odi", text: responseText, voice, mode }]);
+				lastOdiTextRef.current = responseText;
+				if (accessMode !== "text" && accessMode !== "signs") { speak(responseText, voice); }
+				emitTelemetry({
+					correlation_id: correlationId,
+					conversation_id: sessionRef.current,
+					turn_id: turnId,
+					voice_session_id: _isVoice ? ensureVoiceSessionId() : undefined,
+					voice_turn_id: _isVoice ? genVoiceTurnId() : undefined,
+					channel: _isVoice ? "voice" : "text",
+					actor: "architect",
+					ui_actor: voice,
+					persona_mode: lockedMode,
+					route_used: action === "edited"
+						? "route_browser_speech_to_text_review_edited"
+						: "route_browser_speech_to_text_review_confirmed",
+					input_text: voiceText,
+					stt_text_raw: normResult.stt_text_raw,
+					normalized_text: normResult.normalized_text,
+					normalization_applied: normResult.normalization_applied,
+					normalization_rule: normResult.normalization_rule,
+					normalization_confidence: normResult.normalization_confidence,
+					review_required: true,
+					review_reason: review.reviewReason,
+					review_displayed: true,
+					review_action: action,
+					reviewed_text: reviewedText,
+					sent_to_chat_text: reviewedText,
+					stt_provider: "browser_web_speech",
+					tts_provider: _isVoice ? "elevenlabs" : undefined,
+					stt_latency_ms: sttLastLatencyRef.current,
+					tts_latency_ms: _isVoice ? ttsLastLatencyRef.current : null,
+					stt_status: sttLastLatencyRef.current != null ? "ok" : "not_measured",
+					task_created: false,
+					action_executed: false,
+					voice_signature_accepted: false,
+				});
+			}
+		} catch {
+			setMsgs(prev => [...prev, { role: "odi", text: "No logré completar la conexión en este intento. La interfaz de texto sigue disponible.", voice: "ramona", mode: "care" }]);
+		}
+		setIsSending(false);
+	}, [pendingReview, accessMode, authUser, speak]);
 
 	// Wire sendRef for STT
 	useEffect(() => { sendRef.current = sendText; }, [sendText]);
@@ -1052,6 +1273,56 @@ export default function LiveODI() {
 					<div ref={scrollRef} id="odi-conversation" role="log" aria-live="polite"
 						style={{ flex: 1, width: "100%", maxWidth: 620, overflowY: "auto", display: "flex", flexDirection: "column", gap: 14, padding: "4px 0 16px" }}>
 						{msgs.map((m, i) => <Bubble key={i} data={m} isODI={m.role === "odi"} />)}
+						{/* 5C-B2 · Panel de review de transcript · firma jdamg-2026-06-13-stt-transcript-review-before-chat-v1 */}
+						{pendingReview && (
+							<div role="region" aria-label="Revisar transcript" style={{
+								background: `${P.spirit}15`, border: `1px solid ${P.spirit}55`,
+								borderRadius: 14, padding: 14, display: "flex", flexDirection: "column", gap: 10,
+								maxWidth: "90%", alignSelf: "flex-start",
+							}}>
+								<div style={{ fontSize: "0.78rem", color: P.text, fontWeight: 600 }}>
+									Escuché esto y quiero confirmar contigo antes de enviarlo al Hábitat.
+								</div>
+								<div style={{ fontSize: "0.74rem", color: P.textSoft, lineHeight: 1.5 }}>
+									<div style={{ color: P.textFaint, marginBottom: 2 }}>Texto crudo:</div>
+									<div style={{ fontStyle: "italic" }}>"{pendingReview.normResult.stt_text_raw}"</div>
+									{pendingReview.normResult.normalization_applied && (
+										<>
+											<div style={{ color: P.textFaint, marginTop: 6, marginBottom: 2 }}>Lo normalicé como:</div>
+											<div style={{ fontStyle: "italic" }}>"{pendingReview.normResult.normalized_text}"</div>
+										</>
+									)}
+								</div>
+								<input
+									type="text"
+									value={pendingReview.editing}
+									onChange={e => setPendingReview(prev => prev ? { ...prev, editing: e.target.value } : prev)}
+									aria-label="Editar transcript antes de enviar"
+									style={{
+										fontSize: "0.78rem", padding: "8px 10px",
+										background: "rgba(6,13,24,0.6)", border: `1px solid ${P.border}`,
+										borderRadius: 8, color: P.text, outline: "none", fontFamily: "inherit",
+									}}
+								/>
+								<div style={{ fontSize: "0.62rem", color: P.textFaint, fontStyle: "italic" }}>
+									Confirmar no es firma. No crearé tareas ni ejecutaré acciones por esta confirmación.
+								</div>
+								<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+									<button onClick={() => dispatchAfterReview("confirmed", pendingReview.normResult.normalization_applied ? pendingReview.normResult.normalized_text : pendingReview.normResult.stt_text_raw)}
+										style={{ fontSize: "0.72rem", padding: "8px 14px", background: P.alive, color: "#06121d", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>
+										Confirmar
+									</button>
+									<button onClick={() => dispatchAfterReview("edited", pendingReview.editing)}
+										style={{ fontSize: "0.72rem", padding: "8px 14px", background: "transparent", color: P.text, border: `1px solid ${P.spirit}66`, borderRadius: 8, cursor: "pointer" }}>
+										Enviar texto editado
+									</button>
+									<button onClick={() => dispatchAfterReview("cancelled", "")}
+										style={{ fontSize: "0.72rem", padding: "8px 14px", background: "transparent", color: P.textDim, border: `1px solid ${P.textFaint}33`, borderRadius: 8, cursor: "pointer" }}>
+										Cancelar
+									</button>
+								</div>
+							</div>
+						)}
 					</div>
 				)}
 			</main>
