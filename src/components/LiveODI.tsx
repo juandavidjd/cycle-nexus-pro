@@ -876,6 +876,11 @@ export default function LiveODI() {
 
 	// 5C-B2 · dispatchAfterReview: el usuario confirma/edita/cancela el transcript.
 	// CRITICAL: confirmar transcript ≠ firma · NO autoriza ejecución mutativa.
+	// 5C-B2-FIX (firma jdamg-2026-06-13-transcript-review-post-click-dedup-fix-v1):
+	// turn_id post-review único = <original>_reviewed_<action>_<t36>
+	// Mantiene dos eventos auditables en odi_conversation_events:
+	//   evento 1 (review_action=pending) + evento 2 (review_action=confirmed|edited|cancelled)
+	// Evita UniqueViolation 409 de UNIQUE(conversation_id, turn_id).
 	const dispatchAfterReview = useCallback(async (
 		action: "confirmed" | "edited" | "cancelled",
 		finalText: string
@@ -885,13 +890,17 @@ export default function LiveODI() {
 		setPendingReview(null);
 		const { correlationId, turnId, voiceText, normResult } = review;
 		const _isVoice = !(accessMode === "text" || accessMode === "signs");
+		// 5C-B2-FIX · turn_id único post-review
+		const reviewTurnId = `${turnId}_reviewed_${action}_${Date.now().toString(36)}`;
 		if (action === "cancelled") {
 			// No envía a chat_api · solo registra la cancelación en telemetría
 			setMsgs(prev => [...prev, { role: "odi", text: "Cancelado. No envié nada al Hábitat. Cuando quieras intentamos de nuevo.", voice: "ramona", mode: "care" }]);
 			emitTelemetry({
 				correlation_id: correlationId,
 				conversation_id: sessionRef.current,
-				turn_id: turnId,
+				turn_id: reviewTurnId,
+				original_turn_id: turnId,
+				review_of_turn_id: turnId,
 				voice_session_id: _isVoice ? ensureVoiceSessionId() : undefined,
 				voice_turn_id: _isVoice ? genVoiceTurnId() : undefined,
 				channel: _isVoice ? "voice" : "text",
@@ -943,7 +952,9 @@ export default function LiveODI() {
 				emitTelemetry({
 					correlation_id: correlationId,
 					conversation_id: sessionRef.current,
-					turn_id: turnId,
+					turn_id: reviewTurnId,
+					original_turn_id: turnId,
+					review_of_turn_id: turnId,
 					voice_session_id: _isVoice ? ensureVoiceSessionId() : undefined,
 					voice_turn_id: _isVoice ? genVoiceTurnId() : undefined,
 					channel: _isVoice ? "voice" : "text",
