@@ -38,6 +38,54 @@ function genCorrelationId(): string {
 	return `corr_browser_${t}_${r}`;
 }
 
+// 5B · STT_ACRONYM_ODI_NORMALIZATION (firma jdamg-2026-06-13-stt-acronym-odi-normalization-v1)
+// Normalizador CONSERVADOR · NO altera stt_text_raw · SOLO actúa en normalized_text
+// y SOLO dentro del patrón de trazabilidad de voz viva ODI (codigo 749).
+// NO convierte "hoy" globalmente.
+export type SttNormalizationResult = {
+	stt_text_raw: string;
+	normalized_text: string;
+	normalization_applied: boolean;
+	normalization_rule: string | null;
+	normalization_confidence: number;
+};
+export function normalizeOdiAcronym(raw: string): SttNormalizationResult {
+	const out: SttNormalizationResult = {
+		stt_text_raw: raw,
+		normalized_text: raw,
+		normalization_applied: false,
+		normalization_rule: null,
+		normalization_confidence: 0,
+	};
+	if (!raw) return out;
+	// Detección estricta: la frase debe contener el patrón de trazabilidad.
+	// Eso protege "hoy quiero revisar el carril comercio" de la normalización.
+	const trazaPattern = /trazabilidad.{0,40}\d{3}|c[oó]digo\s+(siete\s+cuatro\s+nueve|749)/i;
+	if (!trazaPattern.test(raw)) return out;
+	// Caso 1: prefijo "hoy/oye/oy/o d i" → "ODI"
+	const odiPrefixMatch = raw.match(/^(?<prefix>\s*)(?<word>hoy|oye|oy|o\s*d\s*i|odi)(?=\s+prueba)/i);
+	let normalized = raw;
+	let touched = false;
+	if (odiPrefixMatch && odiPrefixMatch.groups) {
+		const prefix = odiPrefixMatch.groups.prefix || "";
+		normalized = prefix + "ODI" + normalized.slice(odiPrefixMatch[0].length);
+		touched = true;
+	}
+	// Caso 2: "de un viva" → "de voz viva" SOLO dentro del patrón traza
+	if (/de\s+un\s+viva/i.test(normalized)) {
+		normalized = normalized.replace(/de\s+un\s+viva/gi, "de voz viva");
+		touched = true;
+	}
+	if (!touched) return out;
+	return {
+		stt_text_raw: raw,
+		normalized_text: normalized,
+		normalization_applied: true,
+		normalization_rule: "stt_acronym_odi_normalizer_v1",
+		normalization_confidence: 0.9,
+	};
+}
+
 // 4F.2RR · firma jdamg-2026-06-13-browser-voice-granular-telemetry-v1
 // Genera voice_session_id estable a lo largo de la sesión browser y voice_turn_id por turno.
 function genVoiceTurnId(): string {
@@ -655,7 +703,9 @@ export default function LiveODI() {
 				if (accessMode !== "text" && accessMode !== "signs") { speak(responseText, voice); }
 				// 4F.2 · telemetría runtime · post-turno · cero efectos secundarios
 				// 4F.2RR · envelope granular · voice_session_id + voice_turn_id + latencias
+				// 5B · normalizador STT_ACRONYM_ODI · stt_text_raw intacto · normalized_text corregido
 				const _isVoice = !(accessMode === "text" || accessMode === "signs");
+				const _norm = normalizeOdiAcronym(voiceText);
 				emitTelemetry({
 					correlation_id: correlationId,
 					conversation_id: sessionRef.current,
@@ -668,7 +718,11 @@ export default function LiveODI() {
 					persona_mode: lockedMode,
 					route_used: _isVoice ? "route_browser_speech_to_text" : "route_text_response",
 					input_text: voiceText,
-					normalized_text: voiceText.toLowerCase(),
+					stt_text_raw: _norm.stt_text_raw,
+					normalized_text: _norm.normalized_text,
+					normalization_applied: _norm.normalization_applied,
+					normalization_rule: _norm.normalization_rule,
+					normalization_confidence: _norm.normalization_confidence,
 					stt_provider: "browser_web_speech",
 					tts_provider: _isVoice ? "elevenlabs" : undefined,
 					stt_latency_ms: sttLastLatencyRef.current,
