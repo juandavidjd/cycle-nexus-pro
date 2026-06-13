@@ -27,6 +27,29 @@ const P = {
 
 const CHAT_URL = "https://api.liveodi.com/odi/chat";
 const SPEAK_URL = "https://api.liveodi.com/odi/chat/speak";
+// 4F.2 · telemetry endpoint
+// firma jdamg-2026-06-13-liveodi-voice-runtime-telemetry-v1
+const TELEMETRY_URL = "https://api.liveodi.com/habitat/voice/telemetry";
+
+// Genera correlation_id estable para un turno
+function genCorrelationId(): string {
+	const t = Date.now().toString(36);
+	const r = Math.random().toString(36).slice(2, 8);
+	return `corr_browser_${t}_${r}`;
+}
+
+// Emite envelope post-turno sin bloquear UI · fire-and-forget
+async function emitTelemetry(envelope: Record<string, unknown>): Promise<void> {
+	try {
+		await fetch(TELEMETRY_URL, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ ...envelope, voice_signature_accepted: false }),
+		});
+	} catch {
+		// Telemetry failure NUNCA debe romper la UI
+	}
+}
 
 const VOICE_META: Record<string, { color: string; label: string; role: string }> = {
 	ramona: { color: "#c4a0ff", label: "Ramona", role: "anfitriona" },
@@ -553,6 +576,9 @@ export default function LiveODI() {
 		if (!voiceText || isSending) return;
 		setIsSending(true);
 		turnRef.current++;
+		// 4F.2 · correlation id por turno
+		const correlationId = genCorrelationId();
+		const turnId = `turn_${turnRef.current}`;
 		setMsgs(prev => [...prev, { role: "user", text: voiceText }]);
 		try {
 			const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -582,14 +608,47 @@ export default function LiveODI() {
 					from: p.from || p.tienda || "",
 				})).filter((p: any) => p.title);
 				setOrbColor(voice === "tony" ? P.glow : P.spirit);
+				const lockedMode = lockPersonaMode(voice, mode) || mode;
 				setMsgs(prev => [...prev, { role: "odi", text: responseText, voice, mode, products: products.length > 0 ? products : undefined }]);
 				lastOdiTextRef.current = responseText;
 				const visual = data.visual;
 				if (visual && visual.type) { setEphProducts(data.productos || []); setEphemeral(visual); }
 				if (accessMode !== "text" && accessMode !== "signs") { speak(responseText, voice); }
+				// 4F.2 · telemetría runtime · post-turno · cero efectos secundarios
+				emitTelemetry({
+					correlation_id: correlationId,
+					conversation_id: sessionRef.current,
+					turn_id: turnId,
+					channel: "voice",
+					actor: "architect",
+					ui_actor: voice,
+					persona_mode: lockedMode,
+					route_used: accessMode === "text" || accessMode === "signs" ? "route_text_response" : "route_browser_speech_to_text",
+					input_text: voiceText,
+					normalized_text: voiceText.toLowerCase(),
+					stt_provider: "browser_web_speech",
+					tts_provider: accessMode !== "text" && accessMode !== "signs" ? "elevenlabs" : undefined,
+					task_created: false,
+					action_executed: false,
+				});
 			}
 		} catch {
 			setMsgs(prev => [...prev, { role: "odi", text: "No logré completar la conexión en este intento. La interfaz de texto sigue disponible. ¿Quieres reintentar, o prefieres que revise el estado de la ruta?", voice: "ramona", mode: "care" }]);
+			// 4F.2 · telemetría también en fallback · marca la falla sin bloquear UI
+			emitTelemetry({
+				correlation_id: correlationId,
+				conversation_id: sessionRef.current,
+				turn_id: turnId,
+				channel: "voice",
+				actor: "architect",
+				ui_actor: "ramona",
+				persona_mode: "care",
+				route_used: "route_text_fallback",
+				input_text: voiceText,
+				fallback_triggered: true,
+				task_created: false,
+				action_executed: false,
+			});
 		}
 		setIsSending(false);
 	}, [isSending, speak, accessMode, authUser]);
@@ -617,6 +676,9 @@ export default function LiveODI() {
 		setInput("");
 		setIsSending(true);
 		turnRef.current++;
+		// 4F.2 · correlation id por turno
+		const correlationId = genCorrelationId();
+		const turnId = `turn_${turnRef.current}`;
 
 		setMsgs(prev => [...prev, { role: "user", text }]);
 
@@ -664,9 +726,40 @@ export default function LiveODI() {
 				if (accessMode !== "text" && accessMode !== "signs") {
 					speak(responseText, voice);
 				}
+				// 4F.2 · telemetría runtime para canal texto · post-turno
+				const lockedMode = lockPersonaMode(voice, mode) || mode;
+				emitTelemetry({
+					correlation_id: correlationId,
+					conversation_id: sessionRef.current,
+					turn_id: turnId,
+					channel: "text",
+					actor: "architect",
+					ui_actor: voice,
+					persona_mode: lockedMode,
+					route_used: "route_text_response",
+					input_text: text,
+					normalized_text: text.toLowerCase(),
+					task_created: false,
+					action_executed: false,
+				});
 			}
 		} catch {
 			setMsgs(prev => [...prev, { role: "odi", text: "No logré completar la conexión en este intento. La interfaz de texto sigue disponible. ¿Quieres reintentar, o prefieres que revise el estado de la ruta?", voice: "ramona", mode: "care" }]);
+			// 4F.2 · telemetría también en fallback canal texto
+			emitTelemetry({
+				correlation_id: correlationId,
+				conversation_id: sessionRef.current,
+				turn_id: turnId,
+				channel: "text",
+				actor: "architect",
+				ui_actor: "ramona",
+				persona_mode: "care",
+				route_used: "route_text_fallback",
+				input_text: text,
+				fallback_triggered: true,
+				task_created: false,
+				action_executed: false,
+			});
 		}
 		setIsSending(false);
 
