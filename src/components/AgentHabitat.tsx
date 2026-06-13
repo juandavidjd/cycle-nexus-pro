@@ -416,7 +416,7 @@ export function AgentHabitat() {
 				turnStateRef.current = "USER_IDLE";
 			}
 		} catch {
-			pushEvent({ event_id: `err_${Date.now()}`, ts: new Date().toISOString(), source: "agent", type: "error", payload: { text: "No pude conectar con el chat" } });
+			pushEvent({ event_id: `err_${Date.now()}`, ts: new Date().toISOString(), source: "agent", type: "error", payload: { text: "No logré completar la conexión de voz en este intento. La interfaz de texto sigue disponible. No se creó ninguna tarea ni se ejecutó ninguna acción." } });
 			turnStateRef.current = "USER_IDLE";
 		}
 		setIsSending(false);

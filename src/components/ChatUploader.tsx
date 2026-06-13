@@ -118,7 +118,7 @@ export function ChatUploader() {
       const results = await odiApi.searchProducts(searchTerm, 5);
       toast.success(`${results.total} productos encontrados en el ecosistema ODI`);
     } catch {
-      toast.error("Error conectando con ODI. Intenta de nuevo.");
+      toast.error("No logré completar la búsqueda en este intento. Puedes reintentar cuando quieras.");
     }
     setStatusMessage(null);
     setMessage("");

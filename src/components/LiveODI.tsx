@@ -33,6 +33,24 @@ const VOICE_META: Record<string, { color: string; label: string; role: string }>
 	tony: { color: "#49c2ff", label: "Tony", role: "maestro" },
 };
 
+// 4F.1 · persona_mode coherence lock (firma jdamg-2026-06-13-odi-universal-voice-persona-v1)
+// Ramona NUNCA debe mostrarse con modo commerce/diagnose/optimize.
+// Tony NUNCA debe mostrarse con modo care/presence/guidance.
+const PERSONA_MODE_ALLOWED: Record<string, string[]> = {
+	ramona: ["presence", "care", "guidance", "empower", "learn"],
+	tony: ["operation", "commerce", "diagnose", "optimize", "execution_summary"],
+};
+const PERSONA_MODE_FALLBACK: Record<string, string> = {
+	ramona: "presence",
+	tony: "operation",
+};
+function lockPersonaMode(voice: string | undefined, mode: string | undefined): string | undefined {
+	if (!voice || !mode) return mode;
+	const allowed = PERSONA_MODE_ALLOWED[voice];
+	if (!allowed) return mode;
+	return allowed.includes(mode) ? mode : PERSONA_MODE_FALLBACK[voice];
+}
+
 interface Msg {
 	role: "user" | "odi";
 	text: string;
@@ -72,7 +90,7 @@ function Bubble({ data, isODI }: { data: Msg; isODI: boolean }) {
 			{isODI && (
 				<div style={{ display: "flex", alignItems: "center", marginBottom: 2 }}>
 					<VoiceTag voice={data.voice} />
-					{data.mode && <span style={{ fontSize: "0.5rem", color: P.textDim, marginLeft: 8 }}>◆ {data.mode}</span>}
+					{(() => { const m = lockPersonaMode(data.voice, data.mode); return m ? <span style={{ fontSize: "0.5rem", color: P.textDim, marginLeft: 8 }}>◆ {m}</span> : null; })()}
 				</div>
 			)}
 			<p style={{ margin: 0, fontSize: isODI ? "0.9rem" : "0.84rem", lineHeight: 1.6, color: isODI ? P.text : P.textSoft, fontWeight: isODI ? 500 : 400 }}>
@@ -544,7 +562,8 @@ export default function LiveODI() {
 			const _payload: Record<string, unknown> = {
 				message: voiceText,
 				session_id: sessionRef.current,
-				mode: "commerce",
+				// 4F.1 · default presence (Ramona-coherent) en lugar de commerce hardcoded
+				mode: "presence",
 				user_name: authUser?.name,
 			};
 			if (_storeCtx) _payload.default_store = _storeCtx;
@@ -570,7 +589,7 @@ export default function LiveODI() {
 				if (accessMode !== "text" && accessMode !== "signs") { speak(responseText, voice); }
 			}
 		} catch {
-			setMsgs(prev => [...prev, { role: "odi", text: "No pude conectar. Intenta de nuevo.", voice: "ramona", mode: "care" }]);
+			setMsgs(prev => [...prev, { role: "odi", text: "No logré completar la conexión en este intento. La interfaz de texto sigue disponible. ¿Quieres reintentar, o prefieres que revise el estado de la ruta?", voice: "ramona", mode: "care" }]);
 		}
 		setIsSending(false);
 	}, [isSending, speak, accessMode, authUser]);
@@ -609,7 +628,9 @@ export default function LiveODI() {
 			const _payload: Record<string, unknown> = {
 				message: text,
 				session_id: sessionRef.current,
-				mode: "commerce",
+				// 4F.1 · default presence (Ramona-coherent) en lugar de commerce hardcoded
+				// el backend cambia a tony+commerce si detecta intención comercial real
+				mode: "presence",
 				user_name: authUser?.name,
 			};
 			if (_storeCtx) _payload.default_store = _storeCtx;
@@ -645,7 +666,7 @@ export default function LiveODI() {
 				}
 			}
 		} catch {
-			setMsgs(prev => [...prev, { role: "odi", text: "No pude conectar. Intenta de nuevo.", voice: "ramona", mode: "care" }]);
+			setMsgs(prev => [...prev, { role: "odi", text: "No logré completar la conexión en este intento. La interfaz de texto sigue disponible. ¿Quieres reintentar, o prefieres que revise el estado de la ruta?", voice: "ramona", mode: "care" }]);
 		}
 		setIsSending(false);
 
