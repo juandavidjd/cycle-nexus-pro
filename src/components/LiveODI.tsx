@@ -713,9 +713,17 @@ export default function LiveODI() {
 		editing: string;
 	}>(null);
 
+	// 5E-B1R1A · refs declarados antes de sendText para evitar TDZ
+	const pendingReviewRef = useRef<typeof pendingReview>(null);
+	useEffect(() => { pendingReviewRef.current = pendingReview; }, [pendingReview]);
+	const emitReviewCloseLoopRef = useRef<((action: "abandoned" | "timeout" | "navigated_away" | "superseded") => void) | null>(null);
 	// Send message to Chat API
 	const sendText = useCallback(async (voiceText: string) => {
 		if (!voiceText || isSending) return;
+		// 5E-B1R1A · superseded: si hay review pendiente y el habitante inicia nuevo turn,
+		// cierra el review anterior como append-only antes de procesar el nuevo.
+		// firma jdamg-2026-06-15-transcript-review-ui-close-loop-fix-v1
+		if (pendingReviewRef.current && emitReviewCloseLoopRef.current) emitReviewCloseLoopRef.current("superseded");
 		setIsSending(true);
 		turnRef.current++;
 		// 4F.2 · correlation id por turno
@@ -991,6 +999,72 @@ export default function LiveODI() {
 		}
 		setIsSending(false);
 	}, [pendingReview, accessMode, authUser, speak]);
+
+	// 5E-B1R1A · close-loop append-only para reviews abandonados sin botón.
+	// firma jdamg-2026-06-15-transcript-review-ui-close-loop-fix-v1
+	// Emite 4 review_action kinds nuevos: abandoned · timeout · navigated_away · superseded.
+	// Patrón append-only idéntico a dispatchAfterReview: turn_id suffix _reviewed_<action>_<t36>.
+	// Invariante: confirmar/cancelar/editar/abandonar NUNCA son firma · voice_signature_accepted=false.
+	const emitReviewCloseLoop = useCallback((action: "abandoned" | "timeout" | "navigated_away" | "superseded") => {
+		const review = pendingReviewRef.current;
+		if (!review) return;
+		pendingReviewRef.current = null;
+		setPendingReview(null);
+		const { correlationId, turnId, voiceText, normResult } = review;
+		const _isVoice = !(accessModeRef.current === "text" || accessModeRef.current === "signs");
+		const reviewTurnId = `${turnId}_reviewed_${action}_${Date.now().toString(36)}`;
+		emitTelemetry({
+			correlation_id: correlationId,
+			conversation_id: sessionRef.current,
+			turn_id: reviewTurnId,
+			original_turn_id: turnId,
+			review_of_turn_id: turnId,
+			voice_session_id: _isVoice ? ensureVoiceSessionId() : undefined,
+			voice_turn_id: _isVoice ? genVoiceTurnId() : undefined,
+			channel: _isVoice ? "voice" : "text",
+			actor: "architect",
+			ui_actor: "ramona",
+			persona_mode: "care",
+			route_used: `route_browser_speech_to_text_review_${action}`,
+			input_text: voiceText,
+			stt_text_raw: normResult.stt_text_raw,
+			normalized_text: normResult.normalized_text,
+			normalization_applied: normResult.normalization_applied,
+			normalization_rule: normResult.normalization_rule,
+			normalization_confidence: normResult.normalization_confidence,
+			review_required: true,
+			review_reason: review.reviewReason,
+			review_displayed: true,
+			review_action: action,
+			reviewed_text: null,
+			sent_to_chat_text: null,
+			stt_provider: "browser_web_speech",
+			task_created: false,
+			action_executed: false,
+			voice_signature_accepted: false,
+		});
+	}, []);
+	// Wire ref para superseded desde sendText
+	useEffect(() => { emitReviewCloseLoopRef.current = emitReviewCloseLoop; }, [emitReviewCloseLoop]);
+	// timeout · 60s sin decisión cierra como timeout
+	useEffect(() => {
+		if (!pendingReview) return;
+		const t = setTimeout(() => emitReviewCloseLoop("timeout"), 60000);
+		return () => clearTimeout(t);
+	}, [pendingReview, emitReviewCloseLoop]);
+	// abandoned + navigated_away · window listeners global mientras haya pending
+	useEffect(() => {
+		const onBeforeUnload = () => { if (pendingReviewRef.current) emitReviewCloseLoop("abandoned"); };
+		const onVisibilityHidden = () => {
+			if (document.visibilityState === "hidden" && pendingReviewRef.current) emitReviewCloseLoop("navigated_away");
+		};
+		window.addEventListener("beforeunload", onBeforeUnload);
+		document.addEventListener("visibilitychange", onVisibilityHidden);
+		return () => {
+			window.removeEventListener("beforeunload", onBeforeUnload);
+			document.removeEventListener("visibilitychange", onVisibilityHidden);
+		};
+	}, [emitReviewCloseLoop]);
 
 	// Wire sendRef for STT
 	useEffect(() => { sendRef.current = sendText; }, [sendText]);
