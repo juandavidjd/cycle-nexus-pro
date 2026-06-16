@@ -899,6 +899,11 @@ export default function LiveODI() {
 				stt_status: sttLastLatencyRef.current != null ? "ok" : "not_measured",
 				task_created: false,
 				action_executed: false,
+				// 5E-B1R1C · labeling normalization · path text/fallback NO requiere review
+				review_required: false,
+				review_displayed: false,
+				review_action: "not_required",
+				voice_signature_accepted: false,
 			});
 		}
 		setIsSending(false);
@@ -1186,6 +1191,11 @@ export default function LiveODI() {
 					normalized_text: text.toLowerCase(),
 					task_created: false,
 					action_executed: false,
+					// 5E-B1R1C · labeling normalization · path text NO requiere review
+					review_required: false,
+					review_displayed: false,
+					review_action: "not_required",
+					voice_signature_accepted: false,
 				});
 			}
 		} catch {
@@ -1204,6 +1214,11 @@ export default function LiveODI() {
 				fallback_triggered: true,
 				task_created: false,
 				action_executed: false,
+				// 5E-B1R1C · labeling normalization · path text/fallback NO requiere review
+				review_required: false,
+				review_displayed: false,
+				review_action: "not_required",
+				voice_signature_accepted: false,
 			});
 		}
 		setIsSending(false);
