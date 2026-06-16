@@ -200,6 +200,23 @@ function VoiceTag({ voice }: { voice?: string }) {
 	);
 }
 
+// 5E-B1R2 · Ramona→Tony narrated handoff · firma jdamg-2026-06-16-ramona-tony-narrated-handoff-v1
+// Detecta transición Ramona→Tony y emite mensaje narrativo de Ramona ANTES del response de Tony.
+// Solo visual · NO se habla (TTS sigue su flujo con responseText+voice=tony).
+// Invariante: ninguna ejecución por handoff · cero firma · cero task · cero acción.
+const HANDOFF_RAMONA_TO_TONY_POOL = [
+	"Te paso con Tony para la parte operativa. Sigo aquí acompañando el contexto.",
+	"Esto entra en terreno operativo. Tony puede ayudarte con precisión, yo sigo cerca.",
+	"Tony toma la parte técnica. Recuerda: nada se ejecuta sin firma válida.",
+];
+function narrateHandoffRamonaToTony(prevMsgs: { role: string; voice?: string }[], newVoice: string | undefined): { role: "odi"; text: string; voice: string; mode: string } | null {
+	if (newVoice !== "tony") return null;
+	const lastOdi = [...prevMsgs].reverse().find(m => m.role === "odi");
+	if (!lastOdi || lastOdi.voice !== "ramona") return null;
+	const text = HANDOFF_RAMONA_TO_TONY_POOL[Math.floor(Math.random() * HANDOFF_RAMONA_TO_TONY_POOL.length)];
+	return { role: "odi", text, voice: "ramona", mode: "care" };
+}
+
 function ProductCard({ p }: { p: { title: string; price: number; from: string } }) {
 	return (
 		<div style={{ background: P.glass, border: `1px solid ${P.border}`, borderRadius: 10, padding: "10px 12px" }}>
@@ -814,7 +831,12 @@ export default function LiveODI() {
 				})).filter((p: any) => p.title);
 				setOrbColor(voice === "tony" ? P.glow : P.spirit);
 				const lockedMode = lockPersonaMode(voice, mode) || mode;
-				setMsgs(prev => [...prev, { role: "odi", text: responseText, voice, mode, products: products.length > 0 ? products : undefined }]);
+				// 5E-B1R2 · Ramona→Tony narrated handoff · visual only · TTS continúa con Tony
+				setMsgs(prev => {
+					const handoff = narrateHandoffRamonaToTony(prev, voice);
+					const newMsg = { role: "odi" as const, text: responseText, voice, mode, products: products.length > 0 ? products : undefined };
+					return handoff ? [...prev, handoff, newMsg] : [...prev, newMsg];
+				});
 				lastOdiTextRef.current = responseText;
 				const visual = data.visual;
 				if (visual && visual.type) { setEphProducts(data.productos || []); setEphemeral(visual); }
@@ -954,7 +976,12 @@ export default function LiveODI() {
 				const mode = data.mode || "presence";
 				const lockedMode = lockPersonaMode(voice, mode) || mode;
 				setOrbColor(voice === "tony" ? P.glow : P.spirit);
-				setMsgs(prev => [...prev, { role: "odi", text: responseText, voice, mode }]);
+				// 5E-B1R2 · Ramona→Tony narrated handoff · visual only · TTS continúa con Tony
+				setMsgs(prev => {
+					const handoff = narrateHandoffRamonaToTony(prev, voice);
+					const newMsg = { role: "odi" as const, text: responseText, voice, mode };
+					return handoff ? [...prev, handoff, newMsg] : [...prev, newMsg];
+				});
 				lastOdiTextRef.current = responseText;
 				if (accessMode !== "text" && accessMode !== "signs") { speak(responseText, voice); }
 				emitTelemetry({
@@ -1125,7 +1152,12 @@ export default function LiveODI() {
 				})).filter((p: any) => p.title);
 
 				setOrbColor(voice === "tony" ? P.glow : P.spirit);
-				setMsgs(prev => [...prev, { role: "odi", text: responseText, voice, mode, products: products.length > 0 ? products : undefined }]);
+				// 5E-B1R2 · Ramona→Tony narrated handoff · visual only · TTS continúa con Tony
+				setMsgs(prev => {
+					const handoff = narrateHandoffRamonaToTony(prev, voice);
+					const newMsg = { role: "odi" as const, text: responseText, voice, mode, products: products.length > 0 ? products : undefined };
+					return handoff ? [...prev, handoff, newMsg] : [...prev, newMsg];
+				});
 				lastOdiTextRef.current = responseText;
 
 				// Ephemeral window from visual contract
