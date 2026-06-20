@@ -6,13 +6,14 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { SRMPipelineVisual } from './SRMPipelineVisual';
 import { SRM360Viewer, type Product360Data } from './SRM360Viewer';
-import odiApi, { type ODIProductLegacy as ODIProduct } from '@/lib/odiApi';
+import odiApi, { srmIntelligentUpload, srmPollJob, type ODIProductLegacy as ODIProduct } from '@/lib/odiApi';
 
 interface UploadedFile {
   id: string;
   name: string;
   type: string;
   size: number;
+  fileObj?: File;
 }
 
 const getFileIcon = (type: string) => {
@@ -40,8 +41,12 @@ export const SRMIntelligentProcessor = () => {
   const [processedProducts, setProcessedProducts] = useState<ODIProduct[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product360Data | null>(null);
   const [isViewer360Open, setIsViewer360Open] = useState(false);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [pipelineProductsCount, setPipelineProductsCount] = useState<number | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const jobIdRef = useRef<string | null>(null);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -63,6 +68,7 @@ export const SRMIntelligentProcessor = () => {
       name: file.name,
       type: file.type,
       size: file.size,
+      fileObj: file,
     }));
 
     setFiles((prev) => [...prev, ...newFiles]);
@@ -77,6 +83,7 @@ export const SRMIntelligentProcessor = () => {
       name: file.name,
       type: file.type,
       size: file.size,
+      fileObj: file,
     }));
 
     setFiles((prev) => [...prev, ...newFiles]);
@@ -92,17 +99,61 @@ export const SRMIntelligentProcessor = () => {
     setUrl('');
     setIsComplete(false);
     setProcessedProducts([]);
+    setJobId(null);
+    setUploadError(null);
+    setPipelineProductsCount(null);
   };
 
-  const handleProcess = () => {
+  const handleProcess = async () => {
     if (files.length === 0 && !url.trim()) return;
 
     setIsProcessing(true);
     setIsComplete(false);
     setProcessedProducts([]);
+    setJobId(null);
+    setUploadError(null);
+    setPipelineProductsCount(null);
+
+    // Upload first file with real File object → pipeline V25
+    const fileWithObj = files.find(f => f.fileObj);
+    if (fileWithObj?.fileObj) {
+      try {
+        const result = await srmIntelligentUpload(fileWithObj.fileObj, 'KAIQI', undefined, true);
+        if (result.job_id) {
+          jobIdRef.current = result.job_id;  // ref update: no re-render, no timer restart
+          setJobId(result.job_id);           // state update: for display only
+        } else {
+          setUploadError('Pipeline no generó job_id');
+        }
+      } catch (err) {
+        setUploadError(String(err));
+      }
+    }
+    // Visual animation continues regardless (SRMPipelineVisual drives itself via timer)
   };
 
   const handlePipelineComplete = async () => {
+    // Read from ref — avoids stale closure (ref is always current, no re-render on upload completion).
+    const currentJobId = jobIdRef.current;
+    if (currentJobId) {
+      try {
+        // Poll until COMPLETED or 20s timeout
+        for (let i = 0; i < 10; i++) {
+          const status = await srmPollJob(currentJobId);
+          const done = status.completed_at != null || status.status === 'COMPLETED' || status.status === 'FAILED';
+          if (done) {
+            const count = status.result?.products_count;
+            if (count != null) setPipelineProductsCount(count);
+            break;
+          }
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      } catch {
+        // poll failure is non-fatal
+      }
+    }
+
+    // Search related products by filename for table display
     try {
       const searchTerms = files.map(f => f.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ')).join(' ');
       const query = searchTerms || url || 'repuestos moto';
@@ -252,16 +303,38 @@ export const SRMIntelligentProcessor = () => {
           </Button>
         </div>
 
+        {/* Upload error banner */}
+        {uploadError && (
+          <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-400">
+            Error al enviar al pipeline: {uploadError}
+          </div>
+        )}
+
         {/* Pipeline Visual */}
         {(isProcessing || isComplete) && (
           <div className="pt-4">
-            <h4 className="font-subtitle font-semibold text-foreground mb-4">
-              Pipeline SRM
-            </h4>
+            <div className="flex items-center gap-3 mb-4">
+              <h4 className="font-subtitle font-semibold text-foreground">
+                Pipeline SRM
+              </h4>
+              {jobId && (
+                <Badge className="bg-primary/20 text-primary border-primary/30 text-xs font-mono">
+                  job {jobId.slice(-8)}
+                </Badge>
+              )}
+            </div>
             <SRMPipelineVisual
               isProcessing={isProcessing}
-              onComplete={handlePipelineComplete}
+              onComplete={() => { handlePipelineComplete(); }}
             />
+          </div>
+        )}
+
+        {/* Pipeline result summary */}
+        {isComplete && pipelineProductsCount != null && (
+          <div className="px-4 py-3 rounded-lg bg-primary/10 border border-primary/30 text-sm text-primary">
+            Pipeline procesó <strong>{pipelineProductsCount}</strong> productos del catálogo
+            {' '}(dry_run · sin push Shopify)
           </div>
         )}
 

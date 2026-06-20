@@ -485,3 +485,74 @@ export function fetchStoresForIndustry(
 export function clearStoreProfilesCache(): void {
   _profileCache.clear();
 }
+
+// ═══════════════════════════════════════════════════
+// SRM INTELLIGENT UPLOAD (PC II V3 · Ciclo 2 · 2026-06-20)
+// POST /srm/intelligent/upload — requiere Bearer JWT de Supabase.
+// gate: srm_admin | srm_catalog_chief (verificado en backend cuando
+//       ODI_AUTH_GATES_ENABLED=true; hoy el backend no rechaza sin token,
+//       pero el cliente debe enviarlo siempre que esté disponible).
+// ═══════════════════════════════════════════════════
+
+export interface SrmUploadResult {
+  status: string;
+  job_id: string | null;
+  store: string;
+  source_type: string;
+  filename: string;
+  dry_run: boolean;
+  shopify_live: boolean;
+  human_frontier: string;
+  poll?: string;
+}
+
+export interface SrmJobStatus {
+  job_id?: string;
+  store?: string;
+  status?: string;
+  stage?: string;
+  result?: {
+    products_count?: number;
+    stage?: string;
+    errors?: string[];
+    errors_count?: number;
+  };
+  completed_at?: string | null;
+  dry_run?: boolean;
+  error?: string;
+}
+
+// URL vía /odi/v1/ — nginx lo proxy a gateway :8815 → srm_runtime_router
+export async function srmIntelligentUpload(
+  file: File,
+  store: string,
+  sessionToken?: string,
+  dryRun = true,
+): Promise<SrmUploadResult> {
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('store', store);
+  fd.append('dry_run', String(dryRun));
+
+  const headers: Record<string, string> = {};
+  if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
+
+  const res = await fetch(`${ODI_V1_API}/srm/intelligent/upload`, {
+    method: 'POST',
+    headers,
+    body: fd,
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`SRM upload ${res.status}: ${txt}`.trim());
+  }
+
+  return res.json() as Promise<SrmUploadResult>;
+}
+
+export async function srmPollJob(jobId: string): Promise<SrmJobStatus> {
+  const res = await fetch(`${ODI_V1_API}/srm/intelligent/job/${encodeURIComponent(jobId)}`);
+  if (!res.ok) throw new Error(`poll ${res.status}`);
+  return res.json() as Promise<SrmJobStatus>;
+}
