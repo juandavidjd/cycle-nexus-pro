@@ -4,6 +4,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { ROUTE_GATES } from "@/lib/odi-roles";
 
 const LiveODI = lazy(() => import("./components/LiveODI"));
 const AgentPage = lazy(() => import("./pages/AgentHabitat"));
@@ -26,13 +28,25 @@ export default function SRMApp() {
         <Toaster />
         <Sonner />
         <Routes>
-          <Route path="/manager" element={<AgentPage />} />
-          <Route path="/panel" element={<AgentPage />} />
+          <Route path="/manager" element={
+            <ProtectedRoute requiredRoles={ROUTE_GATES['/manager']}>
+              <AgentPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/panel" element={
+            <ProtectedRoute requiredRoles={ROUTE_GATES['/manager']}>
+              <AgentPage />
+            </ProtectedRoute>
+          } />
           <Route path="/agent" element={<LiveODI />} />
           <Route path="/" element={<Index />} />
           <Route path="/catalogo" element={<Catalogo />} />
           <Route path="/clientes" element={<Clientes />} />
-          <Route path="/intelligent" element={<Intelligent />} />
+          <Route path="/intelligent" element={
+            <ProtectedRoute requiredRoles={ROUTE_GATES['/intelligent']}>
+              <Intelligent />
+            </ProtectedRoute>
+          } />
           <Route path="/academia" element={<Academia />} />
           <Route path="/academia/modulo/:id" element={<AcademiaModulo />} />
           <Route path="/auth" element={<Auth />} />
