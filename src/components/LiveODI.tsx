@@ -340,6 +340,170 @@ function AuthPromptEphemeral({ data, onDismiss }: { data: any; onDismiss: () => 
 	);
 }
 
+// ─── Habitat Card Registry · Wire-C · READY-BUT-BLOCKED ────────────────────
+// Activa cuando Wire-B backend emite organism_state / pending_decisions /
+// action_plan / dispatch_task / file_analysis en visual.type.
+// task_created=false hasta TASK_DISPATCHER_CERTIFIED_V1 + F2 firma.
+// Signed: jdamg-2026-07-02-wire-c-habitat-card-registry-v1
+
+function OrganismStateEphemeral({ data, onDismiss }: { data: any; onDismiss: () => void }) {
+	const stores = data?.stores ?? {};
+	const pipeline = data?.pipeline ?? {};
+	const infra = data?.infra ?? {};
+	const decisions = data?.pending_decisions ?? {};
+	const cert = data?.cert_status ?? {};
+	const mode = (data?.habitat_mode ?? "—").replace(/_/g, " ");
+	const pColor = pipeline.status === "healthy" ? P.alive : pipeline.status === "degraded" ? P.warm : P.care;
+	const dPct = infra.disk_pct ?? null;
+	const dColor = dPct === null ? P.textDim : dPct > 85 ? P.care : dPct > 70 ? P.warm : P.alive;
+	const stats = [
+		{ label: "Tiendas", val: `${stores.active ?? 0}/${stores.total ?? 0}`, sub: stores.degraded ? `${stores.degraded} degradadas` : "", color: stores.degraded ? P.warm : P.alive },
+		{ label: "Pipeline", val: pipeline.status || "—", sub: pipeline.last_run_ago_min != null ? `hace ${pipeline.last_run_ago_min}m` : "", color: pColor },
+		{ label: "Disco", val: dPct !== null ? `${dPct}%` : "—", sub: "", color: dColor },
+		{ label: "PG conn", val: infra.pg_connections_active != null ? `${infra.pg_connections_active}/${infra.pg_connections_max ?? "?"}` : "—", sub: "", color: P.text },
+	];
+	return (
+		<div style={{ background: P.glass, border: `1px solid ${P.border}`, borderRadius: 16, padding: "18px 20px", backdropFilter: "blur(12px)", minWidth: 300, maxWidth: 420 }}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+				<span style={{ fontSize: "0.76rem", fontWeight: 700, color: P.glow }}>Organismo</span>
+				<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+					<span style={{ fontSize: "0.54rem", color: P.textDim, background: "rgba(61,184,255,0.1)", padding: "2px 7px", borderRadius: 4 }}>{mode}</span>
+					<button onClick={onDismiss} aria-label="Cerrar" style={{ background: "transparent", border: "none", color: P.textDim, cursor: "pointer", fontSize: "0.7rem" }}>✕</button>
+				</div>
+			</div>
+			<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7, marginBottom: 8 }}>
+				{stats.map(({ label, val, sub, color }) => (
+					<div key={label} style={{ background: "rgba(6,13,24,0.5)", borderRadius: 8, padding: "6px 9px" }}>
+						<div style={{ fontSize: "0.54rem", color: P.textDim, marginBottom: 2 }}>{label}</div>
+						<div style={{ fontSize: "0.8rem", fontWeight: 700, color }}>{val}</div>
+						{sub && <div style={{ fontSize: "0.5rem", color: P.textFaint, marginTop: 1 }}>{sub}</div>}
+					</div>
+				))}
+			</div>
+			{(decisions.count ?? 0) > 0 && (
+				<div style={{ fontSize: "0.64rem", color: P.warm, padding: "5px 8px", background: "rgba(255,159,67,0.08)", borderRadius: 7, marginBottom: 8 }}>
+					{decisions.count} ítem{decisions.count > 1 ? "s" : ""} esperando firma{decisions.oldest_pending_h ? ` · ${decisions.oldest_pending_h}h sin resolver` : ""}
+				</div>
+			)}
+			{(cert.current_gate || cert.status) && (
+				<div style={{ fontSize: "0.54rem", color: P.textFaint }}>{cert.current_gate} · {cert.status}</div>
+			)}
+		</div>
+	);
+}
+
+function PendingDecisionsEphemeral({ data, onDismiss }: { data: any; onDismiss: () => void }) {
+	const count = data?.count ?? 0;
+	const oldestH = data?.oldest_pending_h;
+	const items: string[] = data?.items ?? [];
+	return (
+		<div style={{ background: P.glass, border: `1px solid ${P.warm}33`, borderRadius: 16, padding: "16px 18px", backdropFilter: "blur(12px)", minWidth: 280, maxWidth: 400 }}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+				<span style={{ fontSize: "0.76rem", fontWeight: 700, color: P.warm }}>Pendientes de firma</span>
+				<button onClick={onDismiss} aria-label="Cerrar" style={{ background: "transparent", border: "none", color: P.textDim, cursor: "pointer", fontSize: "0.7rem" }}>✕</button>
+			</div>
+			<div style={{ fontSize: "1.6rem", fontWeight: 700, color: count > 0 ? P.warm : P.alive, marginBottom: 4 }}>{count}</div>
+			<div style={{ fontSize: "0.68rem", color: P.textSoft, marginBottom: (oldestH != null || items.length > 0) ? 8 : 0 }}>
+				{count === 0 ? "Sin pendientes" : `ítem${count > 1 ? "s" : ""} esperando decisión`}
+			</div>
+			{oldestH != null && <div style={{ fontSize: "0.6rem", color: P.textDim, marginBottom: items.length ? 8 : 0 }}>Más antigua: {oldestH}h</div>}
+			{items.length > 0 && (
+				<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+					{items.slice(0, 3).map((item: string, i: number) => (
+						<div key={i} style={{ fontSize: "0.64rem", color: P.textSoft, padding: "4px 8px", background: "rgba(255,159,67,0.07)", borderRadius: 6 }}>{item}</div>
+					))}
+					{items.length > 3 && <div style={{ fontSize: "0.56rem", color: P.textDim }}>+{items.length - 3} más</div>}
+				</div>
+			)}
+		</div>
+	);
+}
+
+function ActionPlanEphemeral({ data, onDismiss }: { data: any; onDismiss: () => void }) {
+	const riskColor: Record<string, string> = { LOW: P.alive, MEDIUM: P.warm, HIGH: P.care, CRITICAL: "#ff4466" };
+	const risk = data?.risk_level ?? "—";
+	const scope: string[] = data?.scope ?? [];
+	return (
+		<div style={{ background: "rgba(11,22,37,0.95)", border: `1px solid ${P.glow}33`, borderRadius: 16, padding: "18px 20px", backdropFilter: "blur(14px)", minWidth: 300, maxWidth: 440 }}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 10 }}>
+				<div>
+					<span style={{ fontSize: "0.56rem", color: P.textDim, letterSpacing: "0.05em" }}>{data?.operation_id ?? ""}</span>
+					<h3 style={{ fontSize: "0.84rem", fontWeight: 700, color: P.text, margin: "4px 0 0" }}>{data?.objective ?? "Plan propuesto"}</h3>
+				</div>
+				<button onClick={onDismiss} aria-label="Cerrar" style={{ background: "transparent", border: "none", color: P.textDim, cursor: "pointer", fontSize: "0.7rem", marginLeft: 10 }}>✕</button>
+			</div>
+			{scope.length > 0 && (
+				<div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+					{scope.map((s: string, i: number) => (
+						<span key={i} style={{ fontSize: "0.56rem", color: P.glow, background: "rgba(61,184,255,0.08)", padding: "2px 6px", borderRadius: 4 }}>{s}</span>
+					))}
+				</div>
+			)}
+			<div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+				<div style={{ background: "rgba(6,13,24,0.6)", borderRadius: 7, padding: "5px 9px", flex: 1 }}>
+					<div style={{ fontSize: "0.52rem", color: P.textDim, marginBottom: 1 }}>Riesgo</div>
+					<div style={{ fontSize: "0.72rem", fontWeight: 700, color: riskColor[risk] ?? P.textSoft }}>{risk}</div>
+				</div>
+				<div style={{ background: "rgba(6,13,24,0.6)", borderRadius: 7, padding: "5px 9px", flex: 2 }}>
+					<div style={{ fontSize: "0.52rem", color: P.textDim, marginBottom: 1 }}>Rollback</div>
+					<div style={{ fontSize: "0.64rem", color: P.textSoft }}>{data?.rollback?.strategy ?? "—"}</div>
+				</div>
+			</div>
+			<div style={{ fontSize: "0.62rem", color: P.textDim, padding: "6px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 8, textAlign: "center" }}>
+				Requiere firma del arquitecto · no ejecuta
+			</div>
+		</div>
+	);
+}
+
+function DispatchTaskEphemeral({ data, onDismiss }: { data: any; onDismiss: () => void }) {
+	const statusColor: Record<string, string> = { pending: P.textDim, in_progress: P.glow, completed: P.alive, failed: P.care };
+	const status = data?.status ?? "pending";
+	return (
+		<div style={{ background: P.glass, border: `1px solid ${P.border}`, borderRadius: 16, padding: "16px 18px", backdropFilter: "blur(12px)", minWidth: 280, maxWidth: 400 }}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+				<span style={{ fontSize: "0.76rem", fontWeight: 700, color: P.glow }}>Tarea despachada</span>
+				<button onClick={onDismiss} aria-label="Cerrar" style={{ background: "transparent", border: "none", color: P.textDim, cursor: "pointer", fontSize: "0.7rem" }}>✕</button>
+			</div>
+			{data?.task_id && <div style={{ fontSize: "0.54rem", color: P.textDim, marginBottom: 4 }}>{data.task_id}</div>}
+			<div style={{ fontSize: "0.8rem", fontWeight: 600, color: P.text, marginBottom: 10 }}>{data?.objective ?? data?.frente ?? "—"}</div>
+			<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+				<span style={{ width: 7, height: 7, borderRadius: "50%", background: statusColor[status] ?? P.textDim, display: "inline-block" }} />
+				<span style={{ fontSize: "0.68rem", color: statusColor[status] ?? P.textDim, fontWeight: 600 }}>{status.replace("_", " ")}</span>
+				{data?.progress_pct != null && <span style={{ fontSize: "0.6rem", color: P.textDim }}>· {data.progress_pct}%</span>}
+			</div>
+		</div>
+	);
+}
+
+function FileAnalysisEphemeral({ data, onDismiss }: { data: any; onDismiss: () => void }) {
+	const sensColor: Record<string, string> = { PUBLIC: P.alive, INTERNAL: P.glow, CONFIDENTIAL: P.warm, RESTRICTED: P.care };
+	const sens = data?.sensitivity_class ?? "INTERNAL";
+	const actions: string[] = data?.actions_available ?? [];
+	return (
+		<div style={{ background: P.glass, border: `1px solid ${P.border}`, borderRadius: 16, padding: "16px 18px", backdropFilter: "blur(12px)", minWidth: 280, maxWidth: 400 }}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+				<span style={{ fontSize: "0.76rem", fontWeight: 700, color: P.glow }}>Archivo analizado</span>
+				<button onClick={onDismiss} aria-label="Cerrar" style={{ background: "transparent", border: "none", color: P.textDim, cursor: "pointer", fontSize: "0.7rem" }}>✕</button>
+			</div>
+			<div style={{ fontSize: "0.8rem", fontWeight: 600, color: P.text, marginBottom: 4 }}>{data?.filename ?? "archivo"}</div>
+			<div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
+				{data?.mime_type && <span style={{ fontSize: "0.56rem", color: P.textDim }}>{data.mime_type}</span>}
+				{data?.size_kb != null && <span style={{ fontSize: "0.56rem", color: P.textDim }}>· {data.size_kb}KB</span>}
+				<span style={{ fontSize: "0.56rem", color: sensColor[sens] ?? P.textDim, background: `${sensColor[sens] ?? P.textDim}18`, padding: "1px 5px", borderRadius: 3 }}>{sens}</span>
+			</div>
+			{data?.summary && <p style={{ fontSize: "0.68rem", color: P.textSoft, margin: "0 0 8px", lineHeight: 1.5 }}>{data.summary}</p>}
+			{actions.length > 0 && (
+				<div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+					{actions.map((a: string, i: number) => (
+						<span key={i} style={{ fontSize: "0.56rem", color: P.glow, background: "rgba(61,184,255,0.08)", padding: "2px 7px", borderRadius: 4 }}>{a.replace(/_/g, " ")}</span>
+					))}
+				</div>
+			)}
+		</div>
+	);
+}
+
 function RegistrationPrompt({ prompt, onAccept, onSkip }: { prompt: { type: string; text: string; acceptLabel: string }; onAccept: () => void; onSkip: () => void }) {
 	return (
 		<div style={{
@@ -406,6 +570,11 @@ function EphemeralWindow({ ephemeral, products, onDismiss }: { ephemeral: Epheme
 			{ephemeral.type === "guardian_shield" && <GuardianShieldEphemeral data={ephemeral.data} />}
 			{ephemeral.type === "info_card" && <InfoCardEphemeral data={ephemeral.data} onDismiss={dismiss} />}
 			{ephemeral.type === "auth_prompt" && <AuthPromptEphemeral data={ephemeral.data} onDismiss={dismiss} />}
+			{ephemeral.type === "organism_state" && <OrganismStateEphemeral data={ephemeral.data} onDismiss={dismiss} />}
+			{ephemeral.type === "pending_decisions" && <PendingDecisionsEphemeral data={ephemeral.data} onDismiss={dismiss} />}
+			{ephemeral.type === "action_plan" && <ActionPlanEphemeral data={ephemeral.data} onDismiss={dismiss} />}
+			{ephemeral.type === "dispatch_task" && <DispatchTaskEphemeral data={ephemeral.data} onDismiss={dismiss} />}
+			{ephemeral.type === "file_analysis" && <FileAnalysisEphemeral data={ephemeral.data} onDismiss={dismiss} />}
 		</div>
 	);
 }
