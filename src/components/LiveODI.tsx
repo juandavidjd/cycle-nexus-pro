@@ -900,7 +900,11 @@ export default function LiveODI() {
 				//   éxito vacío         → sesión sin transcript → cae a saludo normal
 				//   FALLO de red        → DEGRADED, nunca "Hola" (catch del auditor)
 				const _fetchHistory = async () => {
-					const _resp = await fetch(`${CHAT_URL}/history/${encodeURIComponent(sessionRef.current)}`);
+					// RC-02 FIX (catch auditoría): mandar Bearer — si la conversación está ligada a
+					// un human_id, el ACL del backend exige token que matchee; sin él → 404 → degradado eterno.
+					const _h: Record<string, string> = {};
+					if (authTokenRef.current) _h["Authorization"] = `Bearer ${authTokenRef.current}`;
+					const _resp = await fetch(`${CHAT_URL}/history/${encodeURIComponent(sessionRef.current)}`, { headers: _h });
 					if (!_resp.ok) throw new Error(`history ${_resp.status}`);
 					const _data = await _resp.json();
 					return Array.isArray(_data?.messages) ? _data.messages : [];
