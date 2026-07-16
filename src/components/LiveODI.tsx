@@ -895,25 +895,41 @@ export default function LiveODI() {
 			// RC TRANSCRIPT-RC-01 — rehidratación: si la sesión es retornante (reload/reconexión),
 			// traer el transcript durable y reaparecer la conversación EN VEZ de saludar "Hola".
 			if (sessionWasReturningRef.current) {
-				try {
+				// Un intento + un reintento. Distinguimos 3 desenlaces:
+				//   éxito con historial → rehidrata (no saluda)
+				//   éxito vacío         → sesión sin transcript → cae a saludo normal
+				//   FALLO de red        → DEGRADED, nunca "Hola" (catch del auditor)
+				const _fetchHistory = async () => {
 					const _resp = await fetch(`${CHAT_URL}/history/${encodeURIComponent(sessionRef.current)}`);
-					if (_resp.ok) {
-						const _data = await _resp.json();
-						const _hist = Array.isArray(_data?.messages) ? _data.messages : [];
-						if (_hist.length > 0) {
-							// Reconstruir el hilo (texto YA redactado por el backend). Sin TTS del historial.
-							setMsgs(_hist.map((m: { actor_type: string; text: string }) => (
-								m.actor_type === "odi"
-									? { role: "odi", text: m.text, voice: "ramona" }
-									: { role: "user", text: m.text }
-							)));
-							setPhase("habitat");   // la conversación estaba en curso → directo al hábitat
-							return;                // NO saludar: el habitante conserva su conversación
-						}
-					}
+					if (!_resp.ok) throw new Error(`history ${_resp.status}`);
+					const _data = await _resp.json();
+					return Array.isArray(_data?.messages) ? _data.messages : [];
+				};
+				let _hist: Array<{ actor_type: string; text: string }> | null = null;
+				try {
+					_hist = await _fetchHistory();
 				} catch {
-					// fail-open: si la rehidratación falla, caemos al saludo normal (no romper el arranque)
+					await new Promise((r) => setTimeout(r, 1500));  // backoff único
+					try { _hist = await _fetchHistory(); } catch { _hist = null; }
 				}
+				if (_hist === null) {
+					// FALLO tras reintento: NO re-saludar (sabemos que es sesión retornante).
+					// Estado degradado explícito; el habitante no vuelve a "Hola".
+					setMsgs([{ role: "odi", text: "Reconectando con tu conversación…", voice: "ramona", mode: "presence" }]);
+					setPhase("habitat");
+					return;
+				}
+				if (_hist.length > 0) {
+					// Reconstruir el hilo (texto YA redactado por el backend). Sin TTS del historial.
+					setMsgs(_hist.map((m) => (
+						m.actor_type === "odi"
+							? { role: "odi", text: m.text, voice: "ramona" }
+							: { role: "user", text: m.text }
+					)));
+					setPhase("habitat");   // la conversación estaba en curso → directo al hábitat
+					return;                // NO saludar: el habitante conserva su conversación
+				}
+				// _hist === [] → sesión retornante sin transcript → saludo normal abajo.
 			}
 
 			const ref = referrerRef.current;
