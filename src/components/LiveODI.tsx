@@ -651,7 +651,17 @@ export default function LiveODI() {
 	}, []);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const scrollRef = useRef<HTMLDivElement>(null);
-	const sessionRef = useRef(typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `s_${Date.now()}`);
+	// MURO 1 fix: persistir session_id → sobrevive remount/reload del webview (sin esto, cada recarga → "Hola")
+	const sessionRef = useRef<string>("");
+	if (!sessionRef.current) {
+		try {
+			sessionRef.current = localStorage.getItem("odi_chat_session")
+				|| (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `s_${Date.now()}`);
+			localStorage.setItem("odi_chat_session", sessionRef.current);
+		} catch {
+			sessionRef.current = (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `s_${Date.now()}`);
+		}
+	}
 	const audioRef = useRef<HTMLAudioElement | null>(null);
 	const isPlayingRef = useRef(false);
 	// 4F.2RR · voice_session_id estable durante toda la sesión browser
