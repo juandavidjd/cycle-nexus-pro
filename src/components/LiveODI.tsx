@@ -1051,6 +1051,7 @@ export default function LiveODI() {
 				message: voiceText,
 				session_id: sessionRef.current,
 				exchange_id: newExchangeId(),
+				surface: "bridge",
 				// 4F.1 · default presence (Ramona-coherent) en lugar de commerce hardcoded
 				mode: "presence",
 				user_name: authUser?.name,
@@ -1210,7 +1211,7 @@ export default function LiveODI() {
 			if (authTokenRef.current) headers["Authorization"] = `Bearer ${authTokenRef.current}`;
 			const _storeCtx = detectStoreContext();
 			const _payload: Record<string, unknown> = {
-				message: reviewedText, session_id: sessionRef.current, exchange_id: newExchangeId(),
+				message: reviewedText, session_id: sessionRef.current, exchange_id: newExchangeId(), surface: "bridge",
 				mode: "presence", user_name: authUser?.name,
 			};
 			if (_storeCtx) _payload.default_store = _storeCtx;
@@ -1377,6 +1378,7 @@ export default function LiveODI() {
 				message: text,
 				session_id: sessionRef.current,
 				exchange_id: newExchangeId(),
+				surface: "bridge",
 				// 4F.1 · default presence (Ramona-coherent) en lugar de commerce hardcoded
 				// el backend cambia a tony+commerce si detecta intención comercial real
 				mode: "presence",
