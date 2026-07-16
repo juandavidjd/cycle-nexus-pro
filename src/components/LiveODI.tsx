@@ -26,6 +26,13 @@ const P = {
 };
 
 const CHAT_URL = "https://api.liveodi.com/odi/chat";
+// RC TRANSCRIPT — exchange_id estable por envío: correlaciona la voz del habitante y la de
+// ODI en un mismo turno lógico (idempotencia server-side). No hay auto-retry en estos
+// send-paths → un reenvío manual es un turno nuevo (id nuevo, correcto).
+const newExchangeId = () =>
+	(typeof crypto !== "undefined" && crypto.randomUUID
+		? crypto.randomUUID()
+		: `x_${Date.now()}_${Math.random().toString(36).slice(2)}`);
 const SPEAK_URL = "https://api.liveodi.com/odi/chat/speak";
 // 4F.2 · telemetry endpoint
 // firma jdamg-2026-06-13-liveodi-voice-runtime-telemetry-v1
@@ -482,7 +489,22 @@ export default function LiveODI() {
 	}, []);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const scrollRef = useRef<HTMLDivElement>(null);
-	const sessionRef = useRef(typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `s_${Date.now()}`);
+	// MURO 1 / RC TRANSCRIPT — persistir session_id → sobrevive remount/reload del webview
+	// (sin esto, cada recarga → "Hola"). sessionWasReturningRef = true si el id YA estaba
+	// en localStorage → rehidratar transcript en vez de saludar.
+	const sessionRef = useRef<string>("");
+	const sessionWasReturningRef = useRef<boolean>(false);
+	if (!sessionRef.current) {
+		try {
+			const _existing = localStorage.getItem("odi_chat_session");
+			sessionWasReturningRef.current = !!_existing;
+			sessionRef.current = _existing
+				|| (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `s_${Date.now()}`);
+			localStorage.setItem("odi_chat_session", sessionRef.current);
+		} catch {
+			sessionRef.current = (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `s_${Date.now()}`);
+		}
+	}
 	const audioRef = useRef<HTMLAudioElement | null>(null);
 	const isPlayingRef = useRef(false);
 	// 4F.2RR · voice_session_id estable durante toda la sesión browser
@@ -697,9 +719,48 @@ export default function LiveODI() {
 	const authUserRef = useRef<{ name?: string; email?: string } | null>(null);
 	useEffect(() => { authUserRef.current = authUser; }, [authUser]);
 	useEffect(() => {
-		const timer = setTimeout(() => {
+		const timer = setTimeout(async () => {
 			if (greetedRef.current) return;
 			greetedRef.current = true;
+
+			// RC TRANSCRIPT — rehidratación: si la sesión es retornante (reload/reconexión),
+			// traer el transcript durable y reaparecer la conversación EN VEZ de saludar "Hola".
+			if (sessionWasReturningRef.current) {
+				const _fetchHistory = async () => {
+					const _h: Record<string, string> = {};
+					if (authTokenRef.current) _h["Authorization"] = `Bearer ${authTokenRef.current}`;
+					const _resp = await fetch(`${CHAT_URL}/history/${encodeURIComponent(sessionRef.current)}`, { headers: _h });
+					if (!_resp.ok) throw new Error(`history ${_resp.status}`);
+					const _data = await _resp.json();
+					return Array.isArray(_data?.messages) ? _data.messages : [];
+				};
+				let _hist: Array<{ actor_type: string; text: string }> | null = null;
+				try {
+					_hist = await _fetchHistory();
+				} catch {
+					await new Promise((r) => setTimeout(r, 1500));
+					try { _hist = await _fetchHistory(); } catch { _hist = null; }
+				}
+				if (_hist === null) {
+					// FALLO tras reintento: NO re-saludar (es sesión retornante). Estado degradado.
+					setMsgs([{ role: "odi", text: "Reconectando con tu conversación…", voice: "ramona", mode: "presence" }]);
+					setPhase("habitat");
+					return;
+				}
+				if (_hist.length > 0) {
+					setMsgs(_hist.map((m) => (
+						m.actor_type === "odi"
+							? { role: "odi", text: m.text, voice: "ramona" }
+							: { role: "user", text: m.text }
+					)));
+					setPhase("habitat");
+					return;   // NO saludar: el habitante conserva su conversación
+				}
+				// retornante con historial vacío (200 [] legítimo) → NO volver a "Hola": hábitat en silencio.
+				setPhase("habitat");
+				return;
+			}
+
 			const ref = referrerRef.current;
 			const firstName = authUserRef.current?.name?.split(" ")[0];
 			let greeting: string;
@@ -810,6 +871,8 @@ export default function LiveODI() {
 			const _payload: Record<string, unknown> = {
 				message: voiceText,
 				session_id: sessionRef.current,
+				exchange_id: newExchangeId(),
+				surface: "bridge",
 				// 4F.1 · default presence (Ramona-coherent) en lugar de commerce hardcoded
 				mode: "presence",
 				user_name: authUser?.name,
@@ -969,7 +1032,7 @@ export default function LiveODI() {
 			if (authTokenRef.current) headers["Authorization"] = `Bearer ${authTokenRef.current}`;
 			const _storeCtx = detectStoreContext();
 			const _payload: Record<string, unknown> = {
-				message: reviewedText, session_id: sessionRef.current,
+				message: reviewedText, session_id: sessionRef.current, exchange_id: newExchangeId(), surface: "bridge",
 				mode: "presence", user_name: authUser?.name,
 			};
 			if (_storeCtx) _payload.default_store = _storeCtx;
@@ -1135,6 +1198,8 @@ export default function LiveODI() {
 			const _payload: Record<string, unknown> = {
 				message: text,
 				session_id: sessionRef.current,
+				exchange_id: newExchangeId(),
+				surface: "bridge",
 				// 4F.1 · default presence (Ramona-coherent) en lugar de commerce hardcoded
 				// el backend cambia a tony+commerce si detecta intención comercial real
 				mode: "presence",
