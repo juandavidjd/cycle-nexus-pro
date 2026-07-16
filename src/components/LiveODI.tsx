@@ -26,6 +26,13 @@ const P = {
 };
 
 const CHAT_URL = "https://api.liveodi.com/odi/chat";
+// RC TRANSCRIPT-RC-01 — exchange_id estable por envío: correlaciona la voz del
+// habitante y la de ODI en un mismo turno lógico (idempotencia server-side).
+// No hay auto-retry en estos send-paths → un reenvío manual es un turno nuevo (id nuevo, correcto).
+const newExchangeId = () =>
+	(typeof crypto !== "undefined" && crypto.randomUUID
+		? crypto.randomUUID()
+		: `x_${Date.now()}_${Math.random().toString(36).slice(2)}`);
 const SPEAK_URL = "https://api.liveodi.com/odi/chat/speak";
 // 4F.2 · telemetry endpoint
 // firma jdamg-2026-06-13-liveodi-voice-runtime-telemetry-v1
@@ -652,10 +659,15 @@ export default function LiveODI() {
 	const inputRef = useRef<HTMLInputElement>(null);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	// MURO 1 fix: persistir session_id → sobrevive remount/reload del webview (sin esto, cada recarga → "Hola")
+	// RC TRANSCRIPT-RC-01: sessionWasReturningRef = true si el id YA estaba en localStorage
+	// (reload/reconexión) → rehidratar transcript en vez de saludar "Hola".
 	const sessionRef = useRef<string>("");
+	const sessionWasReturningRef = useRef<boolean>(false);
 	if (!sessionRef.current) {
 		try {
-			sessionRef.current = localStorage.getItem("odi_chat_session")
+			const _existing = localStorage.getItem("odi_chat_session");
+			sessionWasReturningRef.current = !!_existing;
+			sessionRef.current = _existing
 				|| (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `s_${Date.now()}`);
 			localStorage.setItem("odi_chat_session", sessionRef.current);
 		} catch {
@@ -876,9 +888,34 @@ export default function LiveODI() {
 	const authUserRef = useRef<{ name?: string; email?: string } | null>(null);
 	useEffect(() => { authUserRef.current = authUser; }, [authUser]);
 	useEffect(() => {
-		const timer = setTimeout(() => {
+		const timer = setTimeout(async () => {
 			if (greetedRef.current) return;
 			greetedRef.current = true;
+
+			// RC TRANSCRIPT-RC-01 — rehidratación: si la sesión es retornante (reload/reconexión),
+			// traer el transcript durable y reaparecer la conversación EN VEZ de saludar "Hola".
+			if (sessionWasReturningRef.current) {
+				try {
+					const _resp = await fetch(`${CHAT_URL}/history/${encodeURIComponent(sessionRef.current)}`);
+					if (_resp.ok) {
+						const _data = await _resp.json();
+						const _hist = Array.isArray(_data?.messages) ? _data.messages : [];
+						if (_hist.length > 0) {
+							// Reconstruir el hilo (texto YA redactado por el backend). Sin TTS del historial.
+							setMsgs(_hist.map((m: { actor_type: string; text: string }) => (
+								m.actor_type === "odi"
+									? { role: "odi", text: m.text, voice: "ramona" }
+									: { role: "user", text: m.text }
+							)));
+							setPhase("habitat");   // la conversación estaba en curso → directo al hábitat
+							return;                // NO saludar: el habitante conserva su conversación
+						}
+					}
+				} catch {
+					// fail-open: si la rehidratación falla, caemos al saludo normal (no romper el arranque)
+				}
+			}
+
 			const ref = referrerRef.current;
 			const firstName = authUserRef.current?.name?.split(" ")[0];
 			let greeting: string;
@@ -989,6 +1026,7 @@ export default function LiveODI() {
 			const _payload: Record<string, unknown> = {
 				message: voiceText,
 				session_id: sessionRef.current,
+				exchange_id: newExchangeId(),
 				// 4F.1 · default presence (Ramona-coherent) en lugar de commerce hardcoded
 				mode: "presence",
 				user_name: authUser?.name,
@@ -1148,7 +1186,7 @@ export default function LiveODI() {
 			if (authTokenRef.current) headers["Authorization"] = `Bearer ${authTokenRef.current}`;
 			const _storeCtx = detectStoreContext();
 			const _payload: Record<string, unknown> = {
-				message: reviewedText, session_id: sessionRef.current,
+				message: reviewedText, session_id: sessionRef.current, exchange_id: newExchangeId(),
 				mode: "presence", user_name: authUser?.name,
 			};
 			if (_storeCtx) _payload.default_store = _storeCtx;
@@ -1314,6 +1352,7 @@ export default function LiveODI() {
 			const _payload: Record<string, unknown> = {
 				message: text,
 				session_id: sessionRef.current,
+				exchange_id: newExchangeId(),
 				// 4F.1 · default presence (Ramona-coherent) en lugar de commerce hardcoded
 				// el backend cambia a tony+commerce si detecta intención comercial real
 				mode: "presence",
