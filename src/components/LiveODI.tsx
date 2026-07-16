@@ -933,7 +933,11 @@ export default function LiveODI() {
 					setPhase("habitat");   // la conversación estaba en curso → directo al hábitat
 					return;                // NO saludar: el habitante conserva su conversación
 				}
-				// _hist === [] → sesión retornante sin transcript → saludo normal abajo.
+				// RC-03 FIX (catch auditoría): sesión RETORNANTE con historial vacío (200 [] legítimo)
+				// NO debe volver a "Hola" — eso rompe el corazón de la feature. Entra al hábitat en
+				// silencio (sin re-saludo); el composer y la esfera están, listo para continuar.
+				setPhase("habitat");
+				return;
 			}
 
 			const ref = referrerRef.current;
