@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { detectStoreContext } from "@/lib/odiApi";
+import EcosystemPanel from "./bridge/EcosystemPanel";
 
 /*
  * LIVEODI — Habitat Real de ODI
@@ -431,6 +432,8 @@ export default function LiveODI() {
 	// Auth session (Google/Microsoft/Apple OAuth)
 	const [authUser, setAuthUser] = useState<{ name?: string; email?: string; provider?: string; human_id?: string } | null>(null);
 	const authTokenRef = useRef<string | null>(null);
+	// Bloque 2 · Puesto de mando · toggle del panel de lectura (no toca conversación/transcript).
+	const [panelOpen, setPanelOpen] = useState(false);
 	useEffect(() => {
 		if (typeof window === "undefined") return;
 		const params = new URLSearchParams(window.location.search);
@@ -1308,6 +1311,20 @@ export default function LiveODI() {
 			fontSize: `${fontSize}rem`,
 			display: "flex", flexDirection: "column", overflow: "hidden",
 		}}>
+			{/* Bloque 2 · Puesto de mando · toggle + panel como overlay FIJO. No altera el flujo
+			    de la conversación ni la desmonta: abrir/cerrar solo togglea panelOpen. */}
+			<button onClick={() => setPanelOpen((v) => !v)} aria-label="Estado del ecosistema"
+				style={{ position: "fixed", top: 12, right: 12, zIndex: 40, background: "#101826",
+					border: "1px solid #2a3b52", color: "#9db8d8", borderRadius: 8,
+					padding: "5px 10px", cursor: "pointer", fontSize: 12 }}>
+				{panelOpen ? "✕ estado" : "▤ estado"}
+			</button>
+			{panelOpen && (
+				<div style={{ position: "fixed", top: 0, right: 0, height: "100vh",
+					width: "min(380px, 90vw)", zIndex: 39, boxShadow: "-8px 0 24px rgba(0,0,0,0.4)" }}>
+					<EcosystemPanel open={panelOpen} bearer={authTokenRef.current} onClose={() => setPanelOpen(false)} />
+				</div>
+			)}
 			{/* OC-16-A11Y: Skip link J1 ciego — primera tab key acceso directo a conversación */}
 			<a
 				href="#odi-conversation"
