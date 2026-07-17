@@ -13,9 +13,11 @@ export interface Section<T> {
 }
 
 export interface DispatchData {
-	frentes: number;
 	counts: { pending: number; running: number; done: number; error: number; blocked: number };
 	attention: boolean;
+	// RC-B2.1: el upstream no expone ciclo/latencia → se muestran las métricas reales del dispatch.
+	metricas: { done_total: number; done_con_evidencia: number; escaladas: number; re_dispatch: number };
+	observed_at: string | null;
 }
 export interface StoreItem {
 	store: string;
@@ -47,6 +49,18 @@ export type PanelFetchState =
 	| { status: "forbidden" }           // 403 — sin autoridad
 	| { status: "error"; code?: string }; // 503/red/timeout
 
+// Guard mínimo de forma: 4 secciones presentes, cada una con un status válido.
+function isValidPanelRead(x: unknown): x is PanelRead {
+	if (!x || typeof x !== "object") return false;
+	const s = (x as { sections?: Record<string, unknown> }).sections;
+	if (!s || typeof s !== "object") return false;
+	for (const k of ["dispatch", "tiendas", "billing", "chromadb"]) {
+		const sec = (s as Record<string, unknown>)[k] as { status?: string } | undefined;
+		if (!sec || (sec.status !== "ok" && sec.status !== "degraded")) return false;
+	}
+	return true;
+}
+
 // GET autenticado con timeout. Rechaza 200 que en realidad sea HTML de fallback.
 export async function fetchPanelRead(bearer: string | null, timeoutMs = 8000): Promise<PanelFetchState> {
 	if (!bearer) return { status: "unauthorized" };
@@ -63,9 +77,12 @@ export async function fetchPanelRead(bearer: string | null, timeoutMs = 8000): P
 		// 200 que no sea JSON = degradado (HTML de fallback, no datos)
 		const ct = resp.headers.get("content-type") || "";
 		if (!ct.includes("application/json")) return { status: "error", code: "non_json" };
-		const data = (await resp.json()) as PanelRead;
-		if (!resp.ok) return { status: "error", code: (data as { error?: string })?.error };
-		return { status: "ready", data, fetchedAt: Date.now() };
+		const raw = await resp.json();
+		if (!resp.ok) return { status: "error", code: (raw as { error?: string })?.error };
+		// RC-B2.1 · SCHEMA GUARD: validar forma mínima antes de dereferenciar (nunca crash
+		// por un 200 incompleto → degradado visible). Las 4 secciones deben existir con {status}.
+		if (!isValidPanelRead(raw)) return { status: "error", code: "malformed" };
+		return { status: "ready", data: raw as PanelRead, fetchedAt: Date.now() };
 	} catch (e) {
 		return { status: "error", code: (e as Error)?.name === "AbortError" ? "timeout" : "network" };
 	} finally {

@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { detectStoreContext } from "@/lib/odiApi";
-import EcosystemPanel from "./bridge/EcosystemPanel";
+import EcosystemPanel, { useViewMode } from "./bridge/EcosystemPanel";
 
 /*
  * LIVEODI — Habitat Real de ODI
@@ -434,6 +434,7 @@ export default function LiveODI() {
 	const authTokenRef = useRef<string | null>(null);
 	// Bloque 2 · Puesto de mando · toggle del panel de lectura (no toca conversación/transcript).
 	const [panelOpen, setPanelOpen] = useState(false);
+	const panelMode = useViewMode();   // desktop=split · tablet=drawer · móvil=full
 	useEffect(() => {
 		if (typeof window === "undefined") return;
 		const params = new URLSearchParams(window.location.search);
@@ -1310,6 +1311,9 @@ export default function LiveODI() {
 			fontFamily: "'DM Sans', system-ui, sans-serif",
 			fontSize: `${fontSize}rem`,
 			display: "flex", flexDirection: "column", overflow: "hidden",
+			// RC-B2.1 split-pane: DESKTOP con panel abierto → la conversación se CORRE (no se tapa).
+			paddingRight: panelOpen && panelMode === "desktop" ? 380 : 0,
+			transition: "padding-right 0.2s ease",
 		}}>
 			{/* Bloque 2 · Puesto de mando · toggle + panel como overlay FIJO. No altera el flujo
 			    de la conversación ni la desmonta: abrir/cerrar solo togglea panelOpen. */}
@@ -1321,7 +1325,7 @@ export default function LiveODI() {
 			</button>
 			{panelOpen && (
 				<div style={{ position: "fixed", top: 0, right: 0, height: "100vh",
-					width: "min(380px, 90vw)", zIndex: 39, boxShadow: "-8px 0 24px rgba(0,0,0,0.4)" }}>
+					zIndex: 39, boxShadow: panelMode === "mobile" ? "none" : "-8px 0 24px rgba(0,0,0,0.4)" }}>
 					<EcosystemPanel open={panelOpen} bearer={authTokenRef.current} onClose={() => setPanelOpen(false)} />
 				</div>
 			)}
