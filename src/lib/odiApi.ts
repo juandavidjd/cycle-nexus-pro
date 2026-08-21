@@ -485,3 +485,117 @@ export function fetchStoresForIndustry(
 export function clearStoreProfilesCache(): void {
   _profileCache.clear();
 }
+
+// ═══════════════════════════════════════════════════
+// PMC / K0 — Puesto de Mando read-only
+// F1A slice 1: ONE endpoint · ONE contract · ZERO mutations.
+// Auth domain: ODI opaque session stored as localStorage `odi_session`.
+// No /auth/validate warm-up, no Supabase token bridge, no bypass keys.
+// ═══════════════════════════════════════════════════
+
+export interface PmcOverall {
+  estado: "ok" | "parcial" | "no_medible" | string;
+  secciones_totales: number | null;
+  secciones_medidas: number | null;
+  secciones_degradadas: number | null;
+  secciones_no_aplicables: number | null;
+}
+
+export interface PmcOperadorData {
+  human_id: string | null;
+  authority_level: number | null;
+  activo: boolean | null;
+  estado: string | null;
+}
+
+export interface PmcCanalData {
+  dispositivos: number | null;
+  dispositivos_activos: number | null;
+  en_hold_de_captura: number | null;
+  sesiones_ojo_activas: number | null;
+  ultimo_latido: string | null;
+}
+
+export interface PmcSection<T> {
+  status: string | null;
+  error_code: string | null;
+  source: string | null;
+  observed_at: string | null;
+  data: T | null;
+}
+
+export interface PmcReadModel {
+  schema?: string;
+  version?: string;
+  generated_at?: string;
+  overall: PmcOverall;
+  sections: {
+    operador?: PmcSection<PmcOperadorData>;
+    canal?: PmcSection<PmcCanalData>;
+    [key: string]: unknown;
+  };
+}
+
+export type PmcApiErrorCode = "AUTH_REQUIRED" | "FORBIDDEN" | "UNAVAILABLE" | "HTTP_ERROR" | "NETWORK_ERROR";
+
+export class PmcApiError extends Error {
+  code: PmcApiErrorCode;
+  status: number | null;
+
+  constructor(code: PmcApiErrorCode, message: string, status: number | null = null) {
+    super(message);
+    this.name = "PmcApiError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+function getOdiSessionToken(): string | null {
+  if (typeof window === "undefined") return null;
+  const token = window.localStorage.getItem("odi_session");
+  return token && token.trim() ? token : null;
+}
+
+async function fetchPmcReadModel(): Promise<PmcReadModel> {
+  const token = getOdiSessionToken();
+  if (!token) {
+    throw new PmcApiError("AUTH_REQUIRED", "Sesión ODI requerida.");
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${ODI_API}/ecosistema/pmc/read-model`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    });
+  } catch {
+    throw new PmcApiError("NETWORK_ERROR", "No fue posible alcanzar K0.");
+  }
+
+  if (response.status === 401) {
+    // Evita un bucle con una sesión ODI inválida/expirada. Nunca imprime el token.
+    if (typeof window !== "undefined" && window.localStorage.getItem("odi_session") === token) {
+      window.localStorage.removeItem("odi_session");
+    }
+    throw new PmcApiError("AUTH_REQUIRED", "La sesión ODI no es válida o expiró.", 401);
+  }
+  if (response.status === 403) {
+    throw new PmcApiError("FORBIDDEN", "La identidad actual no satisface la autoridad efectiva de PMC.", 403);
+  }
+  if (response.status === 503) {
+    throw new PmcApiError("UNAVAILABLE", "K0 no está disponible.", 503);
+  }
+  if (!response.ok) {
+    throw new PmcApiError("HTTP_ERROR", `K0 respondió HTTP ${response.status}.`, response.status);
+  }
+
+  return (await response.json()) as PmcReadModel;
+}
+
+export const pmcApi = {
+  readModel: fetchPmcReadModel,
+};
