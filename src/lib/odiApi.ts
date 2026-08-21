@@ -505,7 +505,6 @@ export interface PmcOverall {
 }
 
 export interface PmcOperadorData {
-  human_id: string | null;
   authority_level: number | null;
   activo: boolean | null;
   estado: string | null;
