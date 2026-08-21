@@ -490,6 +490,7 @@ export function clearStoreProfilesCache(): void {
 // PMC — Puesto de Mando read-only
 // K0 is the primary read-model. bridge-panel-read.v1 contributes narrowly
 // allowlisted secondary signals (first: Billing {estado} only).
+// Self-Healing contributes only its published PII-safe/read-only status scalars.
 // Auth domain: ODI opaque session stored as localStorage `odi_session`.
 // Vercel uses same-origin rewrites only for these read-only endpoints.
 // No /auth/validate warm-up, no Supabase token bridge, no bypass keys.
@@ -564,6 +565,25 @@ export interface PmcBillingSignal {
   status: string | null;
   error_code: string | null;
   estado: string | null;
+}
+
+export interface PmcHealingStats {
+  evaluated: number | null;
+  criteria_triggered: number | null;
+  dispatch_inserted: number | null;
+  dispatch_skipped_duplicate: number | null;
+  skipped_sealed: number | null;
+  errors: number | null;
+}
+
+export interface PmcHealingStatus {
+  timestamp: string | null;
+  version: "healing_status.v1" | string;
+  stats: PmcHealingStats | null;
+  mode_default: string | null;
+  criteria_count: number | null;
+  actions_canonical_count: number | null;
+  last_audit?: unknown;
 }
 
 export type PmcApiErrorCode = "AUTH_REQUIRED" | "FORBIDDEN" | "UNAVAILABLE" | "HTTP_ERROR" | "NETWORK_ERROR";
@@ -660,7 +680,19 @@ async function fetchPmcBillingSignal(): Promise<PmcBillingSignal> {
   };
 }
 
+async function fetchPmcHealingSignal(): Promise<PmcHealingStatus> {
+  const healing = await pmcProtectedGet<PmcHealingStatus>(
+    pmcEndpointUrl("/healing/status", "/pmc-api/healing-status"),
+    "Self-Healing",
+  );
+  if (healing.version !== "healing_status.v1") {
+    throw new PmcApiError("HTTP_ERROR", "Self-Healing devolvió un contrato inesperado.");
+  }
+  return healing;
+}
+
 export const pmcApi = {
   readModel: fetchPmcReadModel,
   billingSignal: fetchPmcBillingSignal,
+  healingSignal: fetchPmcHealingSignal,
 };
