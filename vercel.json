@@ -3,6 +3,7 @@
     { "source": "/pmc-api/read-model", "destination": "https://api.liveodi.com/ecosistema/pmc/read-model" },
     { "source": "/pmc-api/panel-read", "destination": "https://api.liveodi.com/ecosistema/panel-read" },
     { "source": "/pmc-api/healing-status", "destination": "https://api.liveodi.com/healing/status" },
+    { "source": "/pmc-api/paem-reserva", "destination": "https://api.liveodi.com/api/paem/reserva/options" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
