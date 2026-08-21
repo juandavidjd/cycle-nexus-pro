@@ -325,6 +325,7 @@ export interface ManagerFlow {
   description: string;
   return_visit: boolean;
   steps_count: number;
+  return_steps_count: number;
   backend_services: string[];
   organism: string;
   readiness: string;
@@ -486,11 +487,11 @@ export function clearStoreProfilesCache(): void {
 }
 
 // ═══════════════════════════════════════════════════
-// PMC / K0 — Puesto de Mando read-only
-// F1A slice 1: ONE endpoint · ONE contract · ZERO mutations.
+// PMC — Puesto de Mando read-only
+// K0 is the primary read-model. bridge-panel-read.v1 contributes narrowly
+// allowlisted secondary signals (first: Billing {estado} only).
 // Auth domain: ODI opaque session stored as localStorage `odi_session`.
-// Vercel uses a same-origin rewrite for this ONE read-only endpoint so
-// preview/prod browser transport does not depend on a broad CORS exception.
+// Vercel uses same-origin rewrites only for these read-only endpoints.
 // No /auth/validate warm-up, no Supabase token bridge, no bypass keys.
 // ═══════════════════════════════════════════════════
 
@@ -537,6 +538,34 @@ export interface PmcReadModel {
   };
 }
 
+export interface PmcBillingData {
+  estado: string | null;
+}
+
+export interface PmcPanelReadSection<T> {
+  status: string | null;
+  error_code: string | null;
+  data: T | null;
+}
+
+export interface PmcPanelRead {
+  ok?: boolean;
+  schema?: string;
+  generated_at?: string;
+  sections?: {
+    billing?: PmcPanelReadSection<PmcBillingData>;
+    [key: string]: unknown;
+  };
+}
+
+export interface PmcBillingSignal {
+  contract: "bridge-panel-read.v1";
+  generated_at: string | null;
+  status: string | null;
+  error_code: string | null;
+  estado: string | null;
+}
+
 export type PmcApiErrorCode = "AUTH_REQUIRED" | "FORBIDDEN" | "UNAVAILABLE" | "HTTP_ERROR" | "NETWORK_ERROR";
 
 export class PmcApiError extends Error {
@@ -557,14 +586,14 @@ function getOdiSessionToken(): string | null {
   return token && token.trim() ? token : null;
 }
 
-function pmcReadModelUrl(): string {
+function pmcEndpointUrl(livePath: string, previewPath: string): string {
   if (typeof window !== "undefined" && window.location.hostname.endsWith(".vercel.app")) {
-    return "/pmc-api/read-model";
+    return previewPath;
   }
-  return `${ODI_API}/ecosistema/pmc/read-model`;
+  return `${ODI_API}${livePath}`;
 }
 
-async function fetchPmcReadModel(): Promise<PmcReadModel> {
+async function pmcProtectedGet<T>(url: string, label: string): Promise<T> {
   const token = getOdiSessionToken();
   if (!token) {
     throw new PmcApiError("AUTH_REQUIRED", "Sesión ODI requerida.");
@@ -572,7 +601,7 @@ async function fetchPmcReadModel(): Promise<PmcReadModel> {
 
   let response: Response;
   try {
-    response = await fetch(pmcReadModelUrl(), {
+    response = await fetch(url, {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -581,29 +610,57 @@ async function fetchPmcReadModel(): Promise<PmcReadModel> {
       cache: "no-store",
     });
   } catch {
-    throw new PmcApiError("NETWORK_ERROR", "No fue posible alcanzar K0.");
+    throw new PmcApiError("NETWORK_ERROR", `No fue posible alcanzar ${label}.`);
   }
 
   if (response.status === 401) {
-    // Evita un bucle con una sesión ODI inválida/expirada. Nunca imprime el token.
     if (typeof window !== "undefined" && window.localStorage.getItem("odi_session") === token) {
       window.localStorage.removeItem("odi_session");
     }
     throw new PmcApiError("AUTH_REQUIRED", "La sesión ODI no es válida o expiró.", 401);
   }
   if (response.status === 403) {
-    throw new PmcApiError("FORBIDDEN", "La identidad actual no satisface la autoridad efectiva de PMC.", 403);
+    throw new PmcApiError("FORBIDDEN", `La identidad actual no satisface la autoridad efectiva de ${label}.`, 403);
   }
   if (response.status === 503) {
-    throw new PmcApiError("UNAVAILABLE", "K0 no está disponible.", 503);
+    throw new PmcApiError("UNAVAILABLE", `${label} no está disponible.`, 503);
   }
   if (!response.ok) {
-    throw new PmcApiError("HTTP_ERROR", `K0 respondió HTTP ${response.status}.`, response.status);
+    throw new PmcApiError("HTTP_ERROR", `${label} respondió HTTP ${response.status}.`, response.status);
   }
 
-  return (await response.json()) as PmcReadModel;
+  return (await response.json()) as T;
+}
+
+async function fetchPmcReadModel(): Promise<PmcReadModel> {
+  return pmcProtectedGet<PmcReadModel>(
+    pmcEndpointUrl("/ecosistema/pmc/read-model", "/pmc-api/read-model"),
+    "K0",
+  );
+}
+
+async function fetchPmcBillingSignal(): Promise<PmcBillingSignal> {
+  const panel = await pmcProtectedGet<PmcPanelRead>(
+    pmcEndpointUrl("/ecosistema/panel-read", "/pmc-api/panel-read"),
+    "panel-read",
+  );
+  if (panel.schema !== "bridge-panel-read.v1") {
+    throw new PmcApiError("HTTP_ERROR", "panel-read devolvió un contrato inesperado.");
+  }
+  const billing = panel.sections?.billing;
+  if (!billing) {
+    throw new PmcApiError("HTTP_ERROR", "panel-read no devolvió la sección Billing.");
+  }
+  return {
+    contract: "bridge-panel-read.v1",
+    generated_at: panel.generated_at ?? null,
+    status: billing.status ?? null,
+    error_code: billing.error_code ?? null,
+    estado: billing.data?.estado ?? null,
+  };
 }
 
 export const pmcApi = {
   readModel: fetchPmcReadModel,
+  billingSignal: fetchPmcBillingSignal,
 };
