@@ -4,9 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches:
-      - main
-      - pciii/f1a-k0-consumer-r1-20260821
+    branches: [main]
 
 permissions:
   contents: read
