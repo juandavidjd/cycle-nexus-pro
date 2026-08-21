@@ -490,7 +490,7 @@ export function clearStoreProfilesCache(): void {
 // PMC — Puesto de Mando read-only
 // K0 is the primary read-model. bridge-panel-read.v1 contributes narrowly
 // allowlisted secondary signals (first: Billing {estado} only).
-// Self-Healing contributes only its published PII-safe/read-only status scalars.
+// Self-Healing and PAEM contribute only published PII-safe/read-only facts.
 // Auth domain: ODI opaque session stored as localStorage `odi_session`.
 // Vercel uses same-origin rewrites only for these read-only endpoints.
 // No /auth/validate warm-up, no Supabase token bridge, no bypass keys.
@@ -584,6 +584,13 @@ export interface PmcHealingStatus {
   criteria_count: number | null;
   actions_canonical_count: number | null;
   last_audit?: unknown;
+}
+
+export interface PmcPaemReservaSignal {
+  shopify_live_touched: boolean | null;
+  no_reserva_real_sin_actor_real: boolean | null;
+  ruta_activa: string | null;
+  ruta_canonica_futura: string | null;
 }
 
 export type PmcApiErrorCode = "AUTH_REQUIRED" | "FORBIDDEN" | "UNAVAILABLE" | "HTTP_ERROR" | "NETWORK_ERROR";
@@ -691,8 +698,25 @@ async function fetchPmcHealingSignal(): Promise<PmcHealingStatus> {
   return healing;
 }
 
+async function fetchPmcPaemSignal(): Promise<PmcPaemReservaSignal> {
+  const paem = await pmcProtectedGet<PmcPaemReservaSignal>(
+    pmcEndpointUrl("/api/paem/reserva/options", "/pmc-api/paem-reserva"),
+    "PAEM Reserva",
+  );
+  if (paem.ruta_activa !== "/api/paem/reserva/options") {
+    throw new PmcApiError("HTTP_ERROR", "PAEM Reserva devolvió una ruta activa inesperada.");
+  }
+  return {
+    shopify_live_touched: paem.shopify_live_touched ?? null,
+    no_reserva_real_sin_actor_real: paem.no_reserva_real_sin_actor_real ?? null,
+    ruta_activa: paem.ruta_activa ?? null,
+    ruta_canonica_futura: paem.ruta_canonica_futura ?? null,
+  };
+}
+
 export const pmcApi = {
   readModel: fetchPmcReadModel,
   billingSignal: fetchPmcBillingSignal,
   healingSignal: fetchPmcHealingSignal,
+  paemSignal: fetchPmcPaemSignal,
 };
