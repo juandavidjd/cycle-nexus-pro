@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/pmc-api/read-model", "destination": "https://api.liveodi.com/ecosistema/pmc/read-model" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
