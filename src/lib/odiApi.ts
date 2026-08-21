@@ -485,3 +485,237 @@ export function fetchStoresForIndustry(
 export function clearStoreProfilesCache(): void {
   _profileCache.clear();
 }
+
+// ═══════════════════════════════════════════════════
+// PMC — Puesto de Mando read-only
+// K0 is the primary read-model. bridge-panel-read.v1 contributes narrowly
+// allowlisted secondary signals (first: Billing {estado} only).
+// Self-Healing and PAEM contribute only published PII-safe/read-only facts.
+// Auth domain: ODI opaque session stored as localStorage `odi_session`.
+// Vercel uses same-origin rewrites only for these read-only endpoints.
+// No /auth/validate warm-up, no Supabase token bridge, no bypass keys.
+// ═══════════════════════════════════════════════════
+
+export interface PmcOverall {
+  estado: "ok" | "parcial" | "no_medible" | string;
+  secciones_totales: number | null;
+  secciones_medidas: number | null;
+  secciones_degradadas: number | null;
+  secciones_no_aplicables: number | null;
+}
+
+export interface PmcOperadorData {
+  authority_level: number | null;
+  activo: boolean | null;
+  estado: string | null;
+}
+
+export interface PmcCanalData {
+  dispositivos: number | null;
+  dispositivos_activos: number | null;
+  en_hold_de_captura: number | null;
+  sesiones_ojo_activas: number | null;
+  ultimo_latido: string | null;
+}
+
+export interface PmcSection<T> {
+  status: string | null;
+  error_code: string | null;
+  source: string | null;
+  observed_at: string | null;
+  data: T | null;
+}
+
+export interface PmcReadModel {
+  schema?: string;
+  version?: string;
+  generated_at?: string;
+  overall: PmcOverall;
+  sections: {
+    operador?: PmcSection<PmcOperadorData>;
+    canal?: PmcSection<PmcCanalData>;
+    [key: string]: unknown;
+  };
+}
+
+export interface PmcBillingData {
+  estado: string | null;
+}
+
+export interface PmcPanelReadSection<T> {
+  status: string | null;
+  error_code: string | null;
+  data: T | null;
+}
+
+export interface PmcPanelRead {
+  ok?: boolean;
+  schema?: string;
+  generated_at?: string;
+  sections?: {
+    billing?: PmcPanelReadSection<PmcBillingData>;
+    [key: string]: unknown;
+  };
+}
+
+export interface PmcBillingSignal {
+  contract: "bridge-panel-read.v1";
+  generated_at: string | null;
+  status: string | null;
+  error_code: string | null;
+  estado: string | null;
+}
+
+export interface PmcHealingStats {
+  evaluated: number | null;
+  criteria_triggered: number | null;
+  dispatch_inserted: number | null;
+  dispatch_skipped_duplicate: number | null;
+  skipped_sealed: number | null;
+  errors: number | null;
+}
+
+export interface PmcHealingStatus {
+  timestamp: string | null;
+  version: "healing_status.v1" | string;
+  stats: PmcHealingStats | null;
+  mode_default: string | null;
+  criteria_count: number | null;
+  actions_canonical_count: number | null;
+  last_audit?: unknown;
+}
+
+export interface PmcPaemReservaSignal {
+  shopify_live_touched: boolean | null;
+  no_reserva_real_sin_actor_real: boolean | null;
+  ruta_activa: string | null;
+  ruta_canonica_futura: string | null;
+}
+
+export type PmcApiErrorCode = "AUTH_REQUIRED" | "FORBIDDEN" | "UNAVAILABLE" | "HTTP_ERROR" | "NETWORK_ERROR";
+
+export class PmcApiError extends Error {
+  code: PmcApiErrorCode;
+  status: number | null;
+
+  constructor(code: PmcApiErrorCode, message: string, status: number | null = null) {
+    super(message);
+    this.name = "PmcApiError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+function getOdiSessionToken(): string | null {
+  if (typeof window === "undefined") return null;
+  const token = window.localStorage.getItem("odi_session");
+  return token && token.trim() ? token : null;
+}
+
+function pmcEndpointUrl(livePath: string, previewPath: string): string {
+  if (typeof window !== "undefined" && window.location.hostname.endsWith(".vercel.app")) {
+    return previewPath;
+  }
+  return `${ODI_API}${livePath}`;
+}
+
+async function pmcProtectedGet<T>(url: string, label: string): Promise<T> {
+  const token = getOdiSessionToken();
+  if (!token) {
+    throw new PmcApiError("AUTH_REQUIRED", "Sesión ODI requerida.");
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    });
+  } catch {
+    throw new PmcApiError("NETWORK_ERROR", `No fue posible alcanzar ${label}.`);
+  }
+
+  if (response.status === 401) {
+    if (typeof window !== "undefined" && window.localStorage.getItem("odi_session") === token) {
+      window.localStorage.removeItem("odi_session");
+    }
+    throw new PmcApiError("AUTH_REQUIRED", "La sesión ODI no es válida o expiró.", 401);
+  }
+  if (response.status === 403) {
+    throw new PmcApiError("FORBIDDEN", `La identidad actual no satisface la autoridad efectiva de ${label}.`, 403);
+  }
+  if (response.status === 503) {
+    throw new PmcApiError("UNAVAILABLE", `${label} no está disponible.`, 503);
+  }
+  if (!response.ok) {
+    throw new PmcApiError("HTTP_ERROR", `${label} respondió HTTP ${response.status}.`, response.status);
+  }
+
+  return (await response.json()) as T;
+}
+
+async function fetchPmcReadModel(): Promise<PmcReadModel> {
+  return pmcProtectedGet<PmcReadModel>(
+    pmcEndpointUrl("/ecosistema/pmc/read-model", "/pmc-api/read-model"),
+    "K0",
+  );
+}
+
+async function fetchPmcBillingSignal(): Promise<PmcBillingSignal> {
+  const panel = await pmcProtectedGet<PmcPanelRead>(
+    pmcEndpointUrl("/ecosistema/panel-read", "/pmc-api/panel-read"),
+    "panel-read",
+  );
+  if (panel.schema !== "bridge-panel-read.v1") {
+    throw new PmcApiError("HTTP_ERROR", "panel-read devolvió un contrato inesperado.");
+  }
+  const billing = panel.sections?.billing;
+  if (!billing) {
+    throw new PmcApiError("HTTP_ERROR", "panel-read no devolvió la sección Billing.");
+  }
+  return {
+    contract: "bridge-panel-read.v1",
+    generated_at: panel.generated_at ?? null,
+    status: billing.status ?? null,
+    error_code: billing.error_code ?? null,
+    estado: billing.data?.estado ?? null,
+  };
+}
+
+async function fetchPmcHealingSignal(): Promise<PmcHealingStatus> {
+  const healing = await pmcProtectedGet<PmcHealingStatus>(
+    pmcEndpointUrl("/healing/status", "/pmc-api/healing-status"),
+    "Self-Healing",
+  );
+  if (healing.version !== "healing_status.v1") {
+    throw new PmcApiError("HTTP_ERROR", "Self-Healing devolvió un contrato inesperado.");
+  }
+  return healing;
+}
+
+async function fetchPmcPaemSignal(): Promise<PmcPaemReservaSignal> {
+  const paem = await pmcProtectedGet<PmcPaemReservaSignal>(
+    pmcEndpointUrl("/api/paem/reserva/options", "/pmc-api/paem-reserva"),
+    "PAEM Reserva",
+  );
+  if (paem.ruta_activa !== "/api/paem/reserva/options") {
+    throw new PmcApiError("HTTP_ERROR", "PAEM Reserva devolvió una ruta activa inesperada.");
+  }
+  return {
+    shopify_live_touched: paem.shopify_live_touched ?? null,
+    no_reserva_real_sin_actor_real: paem.no_reserva_real_sin_actor_real ?? null,
+    ruta_activa: paem.ruta_activa ?? null,
+    ruta_canonica_futura: paem.ruta_canonica_futura ?? null,
+  };
+}
+
+export const pmcApi = {
+  readModel: fetchPmcReadModel,
+  billingSignal: fetchPmcBillingSignal,
+  healingSignal: fetchPmcHealingSignal,
+  paemSignal: fetchPmcPaemSignal,
+};
