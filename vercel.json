@@ -1,9 +1,54 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
-    { "source": "/pmc-api/read-model", "destination": "https://api.liveodi.com/ecosistema/pmc/read-model" },
-    { "source": "/pmc-api/panel-read", "destination": "https://api.liveodi.com/ecosistema/panel-read" },
-    { "source": "/pmc-api/healing-status", "destination": "https://api.liveodi.com/healing/status" },
-    { "source": "/pmc-api/paem-reserva", "destination": "https://api.liveodi.com/api/paem/reserva/options" },
+    {
+      "source": "/pmc-api/read-model",
+      "has": [
+        {
+          "type": "host",
+          "value": {
+            "re": "^(?:www\\.)?liveodi\\.com$|^.+\\.vercel\\.app$"
+          }
+        }
+      ],
+      "destination": "https://api.liveodi.com/ecosistema/pmc/read-model"
+    },
+    {
+      "source": "/pmc-api/panel-read",
+      "has": [
+        {
+          "type": "host",
+          "value": {
+            "re": "^(?:www\\.)?liveodi\\.com$|^.+\\.vercel\\.app$"
+          }
+        }
+      ],
+      "destination": "https://api.liveodi.com/ecosistema/panel-read"
+    },
+    {
+      "source": "/pmc-api/healing-status",
+      "has": [
+        {
+          "type": "host",
+          "value": {
+            "re": "^(?:www\\.)?liveodi\\.com$|^.+\\.vercel\\.app$"
+          }
+        }
+      ],
+      "destination": "https://api.liveodi.com/healing/status"
+    },
+    {
+      "source": "/pmc-api/paem-reserva",
+      "has": [
+        {
+          "type": "host",
+          "value": {
+            "re": "^(?:www\\.)?liveodi\\.com$|^.+\\.vercel\\.app$"
+          }
+        }
+      ],
+      "destination": "https://api.liveodi.com/api/paem/reserva/options"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
