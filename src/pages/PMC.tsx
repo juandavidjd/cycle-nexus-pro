@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
+  CalendarCheck,
   CircleDollarSign,
   Eye,
   Gauge,
@@ -16,6 +17,7 @@ import {
   pmcApi,
   type PmcBillingSignal,
   type PmcHealingStatus,
+  type PmcPaemReservaSignal,
   type PmcReadModel,
 } from "@/lib/odiApi";
 
@@ -35,6 +37,11 @@ type BillingState =
 type HealingState =
   | { kind: "loading" }
   | { kind: "ready"; data: PmcHealingStatus }
+  | { kind: "degraded"; message: string };
+
+type PaemState =
+  | { kind: "loading" }
+  | { kind: "ready"; data: PmcPaemReservaSignal }
   | { kind: "degraded"; message: string };
 
 const C = {
@@ -132,7 +139,7 @@ function ReadOnlyNotice() {
     >
       <strong style={{ color: C.blue }}>Observación solamente.</strong> El Puesto consume K0
       <code style={{ marginLeft: 5 }}>pmc.read_model.v1</code> como columna vertebral y señales secundarias
-      allowlisted/read-only cuando ya existen. No emite STOP, directivas, grants ni otras mutaciones.
+      read-only cuando ya existen. No emite STOP, reservas, directivas, grants ni otras mutaciones.
     </div>
   );
 }
@@ -141,6 +148,7 @@ export default function PMC() {
   const [state, setState] = useState<ViewState>({ kind: "loading" });
   const [billingState, setBillingState] = useState<BillingState>({ kind: "loading" });
   const [healingState, setHealingState] = useState<HealingState>({ kind: "loading" });
+  const [paemState, setPaemState] = useState<PaemState>({ kind: "loading" });
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async (manual = false) => {
@@ -148,14 +156,16 @@ export default function PMC() {
     else setState({ kind: "loading" });
     setBillingState({ kind: "loading" });
     setHealingState({ kind: "loading" });
+    setPaemState({ kind: "loading" });
 
     try {
       const data = await pmcApi.readModel();
       setState({ kind: "ready", data });
 
-      const [billingResult, healingResult] = await Promise.allSettled([
+      const [billingResult, healingResult, paemResult] = await Promise.allSettled([
         pmcApi.billingSignal(),
         pmcApi.healingSignal(),
+        pmcApi.paemSignal(),
       ]);
 
       if (billingResult.status === "fulfilled") {
@@ -171,10 +181,18 @@ export default function PMC() {
         const message = healingResult.reason instanceof Error ? healingResult.reason.message : "Self-Healing no medible.";
         setHealingState({ kind: "degraded", message });
       }
+
+      if (paemResult.status === "fulfilled") {
+        setPaemState({ kind: "ready", data: paemResult.value });
+      } else {
+        const message = paemResult.reason instanceof Error ? paemResult.reason.message : "PAEM Reserva no medible.";
+        setPaemState({ kind: "degraded", message });
+      }
     } catch (error) {
       const message = "No consultado: K0 no quedó disponible.";
       setBillingState({ kind: "degraded", message });
       setHealingState({ kind: "degraded", message });
+      setPaemState({ kind: "degraded", message });
       if (error instanceof PmcApiError) {
         if (error.code === "AUTH_REQUIRED") setState({ kind: "auth_required" });
         else if (error.code === "FORBIDDEN") setState({ kind: "forbidden" });
@@ -197,6 +215,7 @@ export default function PMC() {
   const operador = data?.sections?.operador?.data;
   const billing = billingState.kind === "ready" ? billingState.data : null;
   const healing = healingState.kind === "ready" ? healingState.data : null;
+  const paem = paemState.kind === "ready" ? paemState.data : null;
   const meta = useMemo(() => overallMeta(data?.overall?.estado), [data?.overall?.estado]);
 
   return (
@@ -391,6 +410,28 @@ export default function PMC() {
                   {healingState.kind === "degraded"
                     ? `Degradado: ${healingState.message}`
                     : `Evaluados: ${displayScalar(healing?.stats?.evaluated)} · disparos: ${displayScalar(healing?.stats?.criteria_triggered)} · errores: ${displayScalar(healing?.stats?.errors)} · sólo estado, no ejecuta heal_store`}
+                </div>
+              </article>
+
+              <article style={{ border: `1px solid ${C.border}`, borderRadius: 16, padding: 18, background: C.surface }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9, color: C.soft }}>
+                  <CalendarCheck size={17} aria-hidden="true" />
+                  <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em" }}>PAEM · Reserva</span>
+                </div>
+                <div style={{ marginTop: 12, fontSize: 20, fontWeight: 650 }}>
+                  {paemState.kind === "loading"
+                    ? "Midiendo…"
+                    : paem?.no_reserva_real_sin_actor_real === true
+                      ? "Actor real requerido"
+                      : displayScalar(paem?.no_reserva_real_sin_actor_real)}
+                </div>
+                <div style={{ color: C.soft, marginTop: 8, fontSize: 12 }}>
+                  Shopify live tocado: {displayScalar(paem?.shopify_live_touched)} · Ruta: {displayScalar(paem?.ruta_activa)}
+                </div>
+                <div style={{ color: paemState.kind === "degraded" ? C.amber : C.dim, marginTop: 8, fontSize: 11 }}>
+                  {paemState.kind === "degraded"
+                    ? `Degradado: ${paemState.message}`
+                    : "Adapter read-only/PII-safe; esta tarjeta no afirma salud integral de PAEM ni crea reservas."}
                 </div>
               </article>
             </section>
