@@ -5,12 +5,19 @@ import {
   CircleDollarSign,
   Eye,
   Gauge,
+  HeartPulse,
   Laptop,
   RefreshCw,
   ShieldCheck,
   TimerReset,
 } from "lucide-react";
-import { PmcApiError, pmcApi, type PmcBillingSignal, type PmcReadModel } from "@/lib/odiApi";
+import {
+  PmcApiError,
+  pmcApi,
+  type PmcBillingSignal,
+  type PmcHealingStatus,
+  type PmcReadModel,
+} from "@/lib/odiApi";
 
 type ViewState =
   | { kind: "loading" }
@@ -23,6 +30,11 @@ type ViewState =
 type BillingState =
   | { kind: "loading" }
   | { kind: "ready"; data: PmcBillingSignal }
+  | { kind: "degraded"; message: string };
+
+type HealingState =
+  | { kind: "loading" }
+  | { kind: "ready"; data: PmcHealingStatus }
   | { kind: "degraded"; message: string };
 
 const C = {
@@ -128,26 +140,41 @@ function ReadOnlyNotice() {
 export default function PMC() {
   const [state, setState] = useState<ViewState>({ kind: "loading" });
   const [billingState, setBillingState] = useState<BillingState>({ kind: "loading" });
+  const [healingState, setHealingState] = useState<HealingState>({ kind: "loading" });
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
     else setState({ kind: "loading" });
     setBillingState({ kind: "loading" });
+    setHealingState({ kind: "loading" });
 
     try {
       const data = await pmcApi.readModel();
       setState({ kind: "ready", data });
 
-      try {
-        const billing = await pmcApi.billingSignal();
-        setBillingState({ kind: "ready", data: billing });
-      } catch (billingError) {
-        const message = billingError instanceof Error ? billingError.message : "Billing no medible.";
+      const [billingResult, healingResult] = await Promise.allSettled([
+        pmcApi.billingSignal(),
+        pmcApi.healingSignal(),
+      ]);
+
+      if (billingResult.status === "fulfilled") {
+        setBillingState({ kind: "ready", data: billingResult.value });
+      } else {
+        const message = billingResult.reason instanceof Error ? billingResult.reason.message : "Billing no medible.";
         setBillingState({ kind: "degraded", message });
       }
+
+      if (healingResult.status === "fulfilled") {
+        setHealingState({ kind: "ready", data: healingResult.value });
+      } else {
+        const message = healingResult.reason instanceof Error ? healingResult.reason.message : "Self-Healing no medible.";
+        setHealingState({ kind: "degraded", message });
+      }
     } catch (error) {
-      setBillingState({ kind: "degraded", message: "No consultado: K0 no quedó disponible." });
+      const message = "No consultado: K0 no quedó disponible.";
+      setBillingState({ kind: "degraded", message });
+      setHealingState({ kind: "degraded", message });
       if (error instanceof PmcApiError) {
         if (error.code === "AUTH_REQUIRED") setState({ kind: "auth_required" });
         else if (error.code === "FORBIDDEN") setState({ kind: "forbidden" });
@@ -169,6 +196,7 @@ export default function PMC() {
   const canal = data?.sections?.canal?.data;
   const operador = data?.sections?.operador?.data;
   const billing = billingState.kind === "ready" ? billingState.data : null;
+  const healing = healingState.kind === "ready" ? healingState.data : null;
   const meta = useMemo(() => overallMeta(data?.overall?.estado), [data?.overall?.estado]);
 
   return (
@@ -347,6 +375,24 @@ export default function PMC() {
                     : `Observado: ${displayTimestamp(billing?.generated_at)} · DTO sin montos/PII`}
                 </div>
               </article>
+
+              <article style={{ border: `1px solid ${C.border}`, borderRadius: 16, padding: 18, background: C.surface }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9, color: C.soft }}>
+                  <HeartPulse size={17} aria-hidden="true" />
+                  <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em" }}>Self-Healing</span>
+                </div>
+                <div style={{ marginTop: 12, fontSize: 20, fontWeight: 650 }}>
+                  {healingState.kind === "loading" ? "Midiendo…" : displayScalar(healing?.mode_default)}
+                </div>
+                <div style={{ color: C.soft, marginTop: 8, fontSize: 12 }}>
+                  Contrato: {healing?.version ?? "healing_status.v1"} · Criterios: {displayScalar(healing?.criteria_count)} · Acciones: {displayScalar(healing?.actions_canonical_count)}
+                </div>
+                <div style={{ color: healingState.kind === "degraded" ? C.amber : C.dim, marginTop: 8, fontSize: 11 }}>
+                  {healingState.kind === "degraded"
+                    ? `Degradado: ${healingState.message}`
+                    : `Evaluados: ${displayScalar(healing?.stats?.evaluated)} · disparos: ${displayScalar(healing?.stats?.criteria_triggered)} · errores: ${displayScalar(healing?.stats?.errors)} · sólo estado, no ejecuta heal_store`}
+                </div>
+              </article>
             </section>
 
             <section
@@ -382,7 +428,7 @@ export default function PMC() {
         ) : null}
 
         <footer style={{ marginTop: 34, color: C.dim, fontSize: 11, lineHeight: 1.7 }}>
-          F1A · K0 + señales allowlisted read-only · Sin controles mutativos · Los campos no medidos permanecen explícitos.
+          F1A · K0 + señales read-only reutilizadas · Sin controles mutativos · Los campos no medidos permanecen explícitos.
         </footer>
       </div>
     </main>
