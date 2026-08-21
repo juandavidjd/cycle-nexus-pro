@@ -7,6 +7,7 @@ const queryClient = new QueryClient();
 
 const IS_HABITAT = typeof window !== "undefined" &&
   (window.location.hostname.replace(/^www\./, "") === "liveodi.com" || window.location.hostname === "localhost");
+const IS_PMC_ROUTE = typeof window !== "undefined" && window.location.pathname === "/pmc";
 
 // Lazy load
 const LiveODI = lazy(() => import("./components/LiveODI"));
@@ -29,7 +30,7 @@ const App = () => (
     <BrowserRouter>
       <SkinProvider>
         <Suspense fallback={<Loading />}>
-          {IS_HABITAT ? (
+          {IS_HABITAT || IS_PMC_ROUTE ? (
             <Routes>
               <Route path="/manager" element={<AgentPage />} />
               <Route path="/panel" element={<AgentPage />} />
