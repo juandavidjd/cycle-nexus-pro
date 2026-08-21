@@ -325,6 +325,7 @@ export interface ManagerFlow {
   description: string;
   return_visit: boolean;
   steps_count: number;
+  return_steps_count: number;
   backend_services: string[];
   organism: string;
   readiness: string;
