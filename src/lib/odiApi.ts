@@ -325,7 +325,6 @@ export interface ManagerFlow {
   description: string;
   return_visit: boolean;
   steps_count: number;
-  return_steps_count: number;
   backend_services: string[];
   organism: string;
   readiness: string;
@@ -490,6 +489,8 @@ export function clearStoreProfilesCache(): void {
 // PMC / K0 — Puesto de Mando read-only
 // F1A slice 1: ONE endpoint · ONE contract · ZERO mutations.
 // Auth domain: ODI opaque session stored as localStorage `odi_session`.
+// Vercel uses a same-origin rewrite for this ONE read-only endpoint so
+// preview/prod browser transport does not depend on a broad CORS exception.
 // No /auth/validate warm-up, no Supabase token bridge, no bypass keys.
 // ═══════════════════════════════════════════════════
 
@@ -556,6 +557,13 @@ function getOdiSessionToken(): string | null {
   return token && token.trim() ? token : null;
 }
 
+function pmcReadModelUrl(): string {
+  if (typeof window !== "undefined" && window.location.hostname.endsWith(".vercel.app")) {
+    return "/pmc-api/read-model";
+  }
+  return `${ODI_API}/ecosistema/pmc/read-model`;
+}
+
 async function fetchPmcReadModel(): Promise<PmcReadModel> {
   const token = getOdiSessionToken();
   if (!token) {
@@ -564,7 +572,7 @@ async function fetchPmcReadModel(): Promise<PmcReadModel> {
 
   let response: Response;
   try {
-    response = await fetch(`${ODI_API}/ecosistema/pmc/read-model`, {
+    response = await fetch(pmcReadModelUrl(), {
       method: "GET",
       headers: {
         Accept: "application/json",
