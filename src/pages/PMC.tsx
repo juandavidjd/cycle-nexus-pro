@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
+  CircleDollarSign,
   Eye,
   Gauge,
   Laptop,
@@ -9,7 +10,7 @@ import {
   ShieldCheck,
   TimerReset,
 } from "lucide-react";
-import { PmcApiError, pmcApi, type PmcReadModel } from "@/lib/odiApi";
+import { PmcApiError, pmcApi, type PmcBillingSignal, type PmcReadModel } from "@/lib/odiApi";
 
 type ViewState =
   | { kind: "loading" }
@@ -18,6 +19,11 @@ type ViewState =
   | { kind: "forbidden" }
   | { kind: "unavailable" }
   | { kind: "error"; message: string };
+
+type BillingState =
+  | { kind: "loading" }
+  | { kind: "ready"; data: PmcBillingSignal }
+  | { kind: "degraded"; message: string };
 
 const C = {
   bg: "#020509",
@@ -112,25 +118,36 @@ function ReadOnlyNotice() {
         lineHeight: 1.6,
       }}
     >
-      <strong style={{ color: C.blue }}>Observación solamente.</strong> Esta primera rebanada consume K0
-      <code style={{ marginLeft: 5 }}>pmc.read_model.v1</code>. No emite STOP, directivas, grants ni otras
-      mutaciones.
+      <strong style={{ color: C.blue }}>Observación solamente.</strong> El Puesto consume K0
+      <code style={{ marginLeft: 5 }}>pmc.read_model.v1</code> como columna vertebral y señales secundarias
+      allowlisted/read-only cuando ya existen. No emite STOP, directivas, grants ni otras mutaciones.
     </div>
   );
 }
 
 export default function PMC() {
   const [state, setState] = useState<ViewState>({ kind: "loading" });
+  const [billingState, setBillingState] = useState<BillingState>({ kind: "loading" });
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
     else setState({ kind: "loading" });
+    setBillingState({ kind: "loading" });
 
     try {
       const data = await pmcApi.readModel();
       setState({ kind: "ready", data });
+
+      try {
+        const billing = await pmcApi.billingSignal();
+        setBillingState({ kind: "ready", data: billing });
+      } catch (billingError) {
+        const message = billingError instanceof Error ? billingError.message : "Billing no medible.";
+        setBillingState({ kind: "degraded", message });
+      }
     } catch (error) {
+      setBillingState({ kind: "degraded", message: "No consultado: K0 no quedó disponible." });
       if (error instanceof PmcApiError) {
         if (error.code === "AUTH_REQUIRED") setState({ kind: "auth_required" });
         else if (error.code === "FORBIDDEN") setState({ kind: "forbidden" });
@@ -151,6 +168,7 @@ export default function PMC() {
   const data = state.kind === "ready" ? state.data : null;
   const canal = data?.sections?.canal?.data;
   const operador = data?.sections?.operador?.data;
+  const billing = billingState.kind === "ready" ? billingState.data : null;
   const meta = useMemo(() => overallMeta(data?.overall?.estado), [data?.overall?.estado]);
 
   return (
@@ -182,7 +200,7 @@ export default function PMC() {
               Puesto de Mando
             </h1>
             <p style={{ margin: 0, color: C.soft, maxWidth: 660, lineHeight: 1.6 }}>
-              Estado vivo del canal y del operador, leído desde el contrato K0. Los vacíos permanecen visibles como
+              Estado vivo del canal, operador y primeras señales del organismo. Los vacíos permanecen visibles como
               “No medido”; nunca se convierten en ceros inventados.
             </p>
           </div>
@@ -304,6 +322,34 @@ export default function PMC() {
             </section>
 
             <section
+              aria-label="Señales del organismo"
+              style={{
+                marginTop: 26,
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                gap: 12,
+              }}
+            >
+              <article style={{ border: `1px solid ${C.border}`, borderRadius: 16, padding: 18, background: C.surface }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9, color: C.soft }}>
+                  <CircleDollarSign size={17} aria-hidden="true" />
+                  <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em" }}>Billing</span>
+                </div>
+                <div style={{ marginTop: 12, fontSize: 20, fontWeight: 650 }}>
+                  {billingState.kind === "loading" ? "Midiendo…" : displayScalar(billing?.estado)}
+                </div>
+                <div style={{ color: C.soft, marginTop: 8, fontSize: 12 }}>
+                  Contrato: {billing?.contract ?? "bridge-panel-read.v1"} · Estado sección: {displayScalar(billing?.status)}
+                </div>
+                <div style={{ color: billingState.kind === "degraded" ? C.amber : C.dim, marginTop: 8, fontSize: 11 }}>
+                  {billingState.kind === "degraded"
+                    ? `Degradado: ${billingState.message}`
+                    : `Observado: ${displayTimestamp(billing?.generated_at)} · DTO sin montos/PII`}
+                </div>
+              </article>
+            </section>
+
+            <section
               style={{
                 marginTop: 26,
                 display: "grid",
@@ -336,7 +382,7 @@ export default function PMC() {
         ) : null}
 
         <footer style={{ marginTop: 34, color: C.dim, fontSize: 11, lineHeight: 1.7 }}>
-          F1A · Slice 1 · K0 read-only · Sin controles mutativos · Los campos no medidos permanecen explícitos.
+          F1A · K0 + señales allowlisted read-only · Sin controles mutativos · Los campos no medidos permanecen explícitos.
         </footer>
       </div>
     </main>
