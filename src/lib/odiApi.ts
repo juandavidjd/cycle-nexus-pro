@@ -378,46 +378,46 @@ async function managerFetch<T>(path: string, options?: RequestInit): Promise<T> 
 }
 
 export const managerApi = {
-  health: () => managerFetch<{ status: string }>('/health'),
+  health: () => managerFetch<{ status: string }>("/health"),
 
   dashboard: (refresh = false) =>
-    managerFetch<ManagerDashboard>(`/dashboard${refresh ? '?refresh=true' : ''}`),
+    managerFetch<ManagerDashboard>(`/dashboard${refresh ? "?refresh=true" : ""}`),
 
   categories: () =>
-    managerFetch<{ categories: ManagerFlowCategory[] }>('/categories').then(d => d.categories),
+    managerFetch<{ categories: ManagerFlowCategory[] }>("/categories").then(d => d.categories),
 
   flows: (category?: string) =>
-    managerFetch<{ flows: ManagerFlow[] }>(category ? `/flows?category=${category}` : '/flows').then(d => d.flows),
+    managerFetch<{ flows: ManagerFlow[] }>(category ? `/flows?category=${category}` : "/flows").then(d => d.flows),
 
   flowDetail: (flowId: string) =>
     managerFetch<ManagerFlowDetail>(`/flows/${flowId}`),
 
   organisms: () =>
-    managerFetch<{ organisms: ManagerOrganism[]; readiness: Record<string, number> }>('/organisms'),
+    managerFetch<{ organisms: ManagerOrganism[]; readiness: Record<string, number> }>("/organisms"),
 
   ecosystem: () =>
-    managerFetch<{ services: Record<string, ManagerService> }>('/ecosystem'),
+    managerFetch<{ services: Record<string, ManagerService> }>("/ecosystem"),
 
   auditStore: (storeId: string) =>
-    managerFetch<ManagerStoreAudit>(`/stores/${storeId}/audit`, { method: 'POST' }),
+    managerFetch<ManagerStoreAudit>(`/stores/${storeId}/audit`, { method: "POST" }),
 
   guardian: () =>
-    managerFetch<Record<string, unknown>>('/guardian'),
+    managerFetch<Record<string, unknown>>("/guardian"),
 
   nightlyAudit: () =>
-    managerFetch<Record<string, unknown>>('/nightly-audit', { method: 'POST' }),
+    managerFetch<Record<string, unknown>>("/nightly-audit", { method: "POST" }),
 
   healStore: (storeId: string) =>
     managerFetch<Record<string, unknown>>(`/stores/${storeId}/heal`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ confirm: true }),
     }),
 
   nightlyHeal: () =>
-    managerFetch<Record<string, unknown>>('/nightly-heal', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    managerFetch<Record<string, unknown>>("/nightly-heal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ confirm: true }),
     }),
 };
@@ -433,7 +433,7 @@ import type {
   StoreProfile,
   StoreProfileListResponse,
   StoreProfileByIndustryResponse,
-} from '@/types/store-profile';
+} from "@/types/store-profile";
 
 type CacheEntry<T> = { at: number; data: T };
 const PROFILE_TTL_MS = 60_000;
@@ -444,7 +444,7 @@ async function cachedJson<T>(key: string, url: string): Promise<T> {
   if (hit && Date.now() - hit.at < PROFILE_TTL_MS) {
     return hit.data as T;
   }
-  const r = await fetch(url, { headers: { Accept: 'application/json' } });
+  const r = await fetch(url, { headers: { Accept: "application/json" } });
   if (!r.ok) {
     throw new Error(`${url} → HTTP ${r.status}`);
   }
@@ -456,7 +456,7 @@ async function cachedJson<T>(key: string, url: string): Promise<T> {
 /** List 16 summary rows — `GET /store-profiles`. */
 export function fetchStoreProfiles(): Promise<StoreProfileListResponse> {
   return cachedJson<StoreProfileListResponse>(
-    'list',
+    "list",
     `${ODI_API}/store-profiles`
   );
 }
@@ -505,7 +505,6 @@ export interface PmcOverall {
 }
 
 export interface PmcOperadorData {
-  human_id: string | null;
   authority_level: number | null;
   activo: boolean | null;
   estado: string | null;
