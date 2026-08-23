@@ -11,6 +11,7 @@ const IS_HABITAT = typeof window !== "undefined" &&
 // Lazy load
 const LiveODI = lazy(() => import("./components/LiveODI"));
 const AgentPage = lazy(() => import("./pages/AgentHabitat"));
+const OperatorGrant = lazy(() => import("./pages/OperatorGrant"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Terms = lazy(() => import("./pages/Terms"));
 
@@ -32,6 +33,7 @@ const App = () => (
             <Routes>
               <Route path="/manager" element={<AgentPage />} />
               <Route path="/panel" element={<AgentPage />} />
+              <Route path="/operator-grant" element={<OperatorGrant />} />
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/terms" element={<Terms />} />
               <Route path="*" element={<LiveODI />} />

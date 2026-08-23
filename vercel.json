@@ -1,4 +1,19 @@
 {
+  "headers": [
+    {
+      "source": "/operator-grant",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, private, max-age=0" },
+        { "key": "Pragma", "value": "no-cache" },
+        { "key": "Referrer-Policy", "value": "no-referrer" },
+        { "key": "X-Robots-Tag", "value": "noindex, noarchive, nosnippet" },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; connect-src 'self' https://api.liveodi.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]
