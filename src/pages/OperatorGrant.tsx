@@ -5,7 +5,8 @@ const AUTH_STORAGE_KEY = "odi_session";
 const AUTH_VALIDATE_URL = "https://api.liveodi.com/auth/validate";
 const SW_IDENTITY = "ODI_OPERATOR_SW_SAFE_R1";
 const SW_TIMEOUT_MS = 5000;
-const REHEARSAL_TTL_SECONDS = 120;
+const MIN_START_BUDGET_SECONDS = 119;
+const MIN_START_BUDGET_MS = MIN_START_BUDGET_SECONDS * 1000;
 
 type SwState =
   | "CHECKING"
@@ -16,28 +17,28 @@ type SwState =
   | "WAITING_CONTROLLERCHANGE";
 
 type AuthState = "CHECKING" | "PASS" | "FAIL";
+type IssueState = "IDLE" | "REQUESTING" | "PASS" | "FAIL";
 
 type PresentedGrant = {
   grantId: string;
   value: string;
   expiresAtMs: number;
-  provenance: "LOCAL_IN_MEMORY_REHEARSAL";
+  provenance: "LIVE_OPERATOR_GRANT";
 };
 
-function makeBase64Url43(): string {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  let binary = "";
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-function parseGrantEnvelope(input: unknown): { grantId: string; value: string; expiresAtMs: number } | null {
+function parseGrantEnvelope(
+  input: unknown,
+): { grantId: string; value: string; expiresAtMs: number } | null {
   if (!input || typeof input !== "object") return null;
   const x = input as Record<string, unknown>;
   if (x.ok !== true) return null;
   if (typeof x.grant_id !== "string" || x.grant_id.length === 0) return null;
-  if (typeof x.pairing_secret !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(x.pairing_secret)) return null;
+  if (
+    typeof x.pairing_secret !== "string" ||
+    !/^[A-Za-z0-9_-]{43}$/.test(x.pairing_secret)
+  ) {
+    return null;
+  }
   if (typeof x.expires_at !== "string") return null;
   const expiresAtMs = Date.parse(x.expires_at);
   if (!Number.isFinite(expiresAtMs)) return null;
@@ -60,7 +61,9 @@ function waitForControllerChange(timeoutMs: number): Promise<boolean> {
   });
 }
 
-function handshakeController(timeoutMs: number): Promise<"PASS" | "FAIL_IDENTITY_MISMATCH" | "FAIL_TIMEOUT"> {
+function handshakeController(
+  timeoutMs: number,
+): Promise<"PASS" | "FAIL_IDENTITY_MISMATCH" | "FAIL_TIMEOUT"> {
   return new Promise((resolve) => {
     const controller = navigator.serviceWorker.controller;
     if (!controller) {
@@ -72,7 +75,9 @@ function handshakeController(timeoutMs: number): Promise<"PASS" | "FAIL_IDENTITY
     const channel = new MessageChannel();
     let settled = false;
 
-    const finish = (value: "PASS" | "FAIL_IDENTITY_MISMATCH" | "FAIL_TIMEOUT") => {
+    const finish = (
+      value: "PASS" | "FAIL_IDENTITY_MISMATCH" | "FAIL_TIMEOUT",
+    ) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -97,14 +102,23 @@ function handshakeController(timeoutMs: number): Promise<"PASS" | "FAIL_IDENTITY
 
     controller.postMessage(
       { type: "ODI_OPERATOR_SW_HANDSHAKE", identity: SW_IDENTITY, nonce },
-      [channel.port2]
+      [channel.port2],
     );
   });
+}
+
+function readErrorCode(input: unknown): string | null {
+  if (!input || typeof input !== "object") return null;
+  const x = input as Record<string, unknown>;
+  return typeof x.error === "string" ? x.error : null;
 }
 
 export default function OperatorGrant() {
   const [auth, setAuth] = useState<AuthState>("CHECKING");
   const [sw, setSw] = useState<SwState>("CHECKING");
+  const [issue, setIssue] = useState<IssueState>("IDLE");
+  const [issueError, setIssueError] = useState<string | null>(null);
+  const [hasDispatched, setHasDispatched] = useState(false);
   const [presented, setPresented] = useState<PresentedGrant | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -200,33 +214,83 @@ export default function OperatorGrant() {
     if (presented && secondsLeft <= 0) clearPresented();
   }, [presented, secondsLeft, clearPresented]);
 
-  const runLocalRehearsal = () => {
-    if (auth !== "PASS" || sw !== "PASS") return;
-
-    const fixture = {
-      ok: true,
-      grant_id: "LOCAL_IN_MEMORY_REHEARSAL",
-      pairing_secret: makeBase64Url43(),
-      expires_at: new Date(Date.now() + REHEARSAL_TTL_SECONDS * 1000).toISOString(),
-    };
-
-    const parsed = parseGrantEnvelope(fixture);
-    if (!parsed) {
-      clearPresented();
+  const issueLiveGrant = async () => {
+    if (
+      auth !== "PASS" ||
+      sw !== "PASS" ||
+      issue === "REQUESTING" ||
+      hasDispatched
+    ) {
       return;
     }
 
-    setNowMs(Date.now());
-    setPresented({
-      grantId: parsed.grantId,
-      value: parsed.value,
-      expiresAtMs: parsed.expiresAtMs,
-      provenance: "LOCAL_IN_MEMORY_REHEARSAL",
-    });
+    const token = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!token) {
+      setAuth("FAIL");
+      return;
+    }
+
+    setIssue("REQUESTING");
+    setIssueError(null);
+    clearPresented();
+    setHasDispatched(true);
+
+    try {
+      const response = await fetch("/api/operator-grant", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+        cache: "no-store",
+        credentials: "omit",
+        redirect: "error",
+        referrerPolicy: "no-referrer",
+      });
+
+      const payload: unknown = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        setIssue("FAIL");
+        setIssueError(readErrorCode(payload) ?? `HTTP_${response.status}`);
+        return;
+      }
+
+      const parsed = parseGrantEnvelope(payload);
+      if (!parsed) {
+        setIssue("FAIL");
+        setIssueError("INVALID_GRANT_ENVELOPE");
+        return;
+      }
+
+      const remainingMs = parsed.expiresAtMs - Date.now();
+      if (remainingMs < MIN_START_BUDGET_MS) {
+        setIssue("FAIL");
+        setIssueError("INSUFFICIENT_CLIENT_START_BUDGET");
+        return;
+      }
+
+      setNowMs(Date.now());
+      setPresented({
+        grantId: parsed.grantId,
+        value: parsed.value,
+        expiresAtMs: parsed.expiresAtMs,
+        provenance: "LIVE_OPERATOR_GRANT",
+      });
+      setIssue("PASS");
+    } catch {
+      setIssue("FAIL");
+      setIssueError("ISSUANCE_REQUEST_FAILED");
+    }
   };
 
   if (auth === "CHECKING") {
-    return <main style={styles.shell}><section style={styles.card}>Validando sesión…</section></main>;
+    return (
+      <main style={styles.shell}>
+        <section style={styles.card}>Validando sesión…</section>
+      </main>
+    );
   }
 
   if (auth !== "PASS") {
@@ -240,13 +304,16 @@ export default function OperatorGrant() {
     );
   }
 
+  const canIssue = sw === "PASS" && issue !== "REQUESTING" && !hasDispatched;
+
   return (
     <main style={styles.shell}>
       <section style={styles.card}>
-        <div style={styles.banner}>ENSAYO · NO EMITE CONCESIONES</div>
+        <div style={styles.banner}>CALIBRATED LIVE · EMISIÓN REAL ONE-SHOT</div>
         <h1 style={styles.title}>Operador de vinculación 0.1.3</h1>
         <p style={styles.muted}>
-          Stage A · CALIBRATION_LOCKED. La capacidad de emisión real no existe en este despliegue.
+          Stage B · CALIBRATED_LIVE. La emisión requiere AUTH y SW en PASS y
+          aplica un presupuesto mínimo de inicio de {MIN_START_BUDGET_SECONDS}s.
         </p>
 
         <div style={styles.grid}>
@@ -255,53 +322,66 @@ export default function OperatorGrant() {
             <span style={sw === "PASS" ? styles.pass : styles.warn}>{sw}</span>
           </div>
           <div style={styles.statusBox}>
-            <strong>CALIBRACIÓN</strong>
-            <span style={styles.warn}>NOT_CALIBRATED</span>
+            <strong>MIN START BUDGET</strong>
+            <span style={styles.pass}>{MIN_START_BUDGET_SECONDS}s</span>
           </div>
         </div>
 
         <hr style={styles.hr} />
 
-        <h2 style={styles.h2}>Rehearsal local</h2>
+        <h2 style={styles.h2}>Concesión real</h2>
         <p style={styles.muted}>
-          Genera un valor NONSECRET de 43 caracteres únicamente en memoria. Este camino no llama
-          a <code>/api/operator-grant</code> ni a ningún endpoint de pairing.
+          Un clic humano despacha como máximo una solicitud desde esta carga de
+          página. No hay reintento automático. Si el presupuesto de inicio es
+          insuficiente, el secreto no se presenta.
         </p>
 
         <div style={styles.actions}>
           <button
             type="button"
-            onClick={runLocalRehearsal}
-            disabled={sw !== "PASS"}
-            style={{ ...styles.button, ...(sw !== "PASS" ? styles.buttonDisabled : {}) }}
+            onClick={issueLiveGrant}
+            disabled={!canIssue}
+            style={{ ...styles.button, ...(!canIssue ? styles.buttonDisabled : {}) }}
           >
-            Generar ensayo local
+            {issue === "REQUESTING" ? "Emitiendo…" : "Emitir concesión real"}
           </button>
           <button
             type="button"
             onClick={clearPresented}
             disabled={!presented}
-            style={{ ...styles.secondaryButton, ...(!presented ? styles.buttonDisabled : {}) }}
+            style={{
+              ...styles.secondaryButton,
+              ...(!presented ? styles.buttonDisabled : {}),
+            }}
           >
-            Limpiar
+            Limpiar secreto de pantalla
           </button>
         </div>
+
+        {issue === "FAIL" && issueError && (
+          <div style={styles.errorBox}>
+            <strong>EMISIÓN NO UTILIZABLE</strong>
+            <span style={styles.danger}>{issueError}</span>
+            <div style={styles.small}>NO RETRY AUTOMÁTICO · NO SEGUNDO CLICK</div>
+          </div>
+        )}
 
         {presented && (
           <div style={styles.secretBox}>
             <div style={styles.small}>PROVENANCE · {presented.provenance}</div>
+            <div style={styles.small}>GRANT ID · {presented.grantId}</div>
             <div style={styles.secret}>{presented.value}</div>
-            <div style={styles.small}>Ventana simulada restante: {secondsLeft}s</div>
+            <div style={styles.small}>Ventana restante: {secondsLeft}s</div>
             <p style={styles.muted}>
-              Para el dry-run autorizado posteriormente, este valor se transcribe manualmente al
-              CredUI nativo. No es una concesión real.
+              Transcribe manualmente este valor al CredUI nativo. Permanece sólo
+              en memoria React y se elimina al expirar o al pulsar Limpiar.
             </p>
           </div>
         )}
 
         <div style={styles.lockBox}>
           <strong>LIVE ISSUANCE</strong>
-          <span style={styles.danger}>AUSENTE · OPERATOR_NOT_CALIBRATED</span>
+          <span style={styles.pass}>CALIBRATED · ONE-SHOT PER PAGE LOAD</span>
         </div>
       </section>
     </main>
@@ -327,9 +407,9 @@ const styles: Record<string, CSSProperties> = {
     boxShadow: "0 24px 70px rgba(0,0,0,.35)",
   },
   banner: {
-    border: "1px solid #6d5c18",
-    background: "#211d08",
-    color: "#ffe67a",
+    border: "1px solid #255276",
+    background: "#071a2a",
+    color: "#8dffb2",
     borderRadius: 10,
     padding: "10px 12px",
     fontWeight: 800,
@@ -378,6 +458,16 @@ const styles: Record<string, CSSProperties> = {
     cursor: "pointer",
   },
   buttonDisabled: { opacity: 0.45, cursor: "not-allowed" },
+  errorBox: {
+    marginTop: 18,
+    border: "1px solid #6b2b2b",
+    borderRadius: 12,
+    background: "#1a0808",
+    padding: 16,
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  },
   secretBox: {
     marginTop: 18,
     border: "1px solid #255276",
