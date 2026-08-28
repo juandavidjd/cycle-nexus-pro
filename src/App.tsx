@@ -9,7 +9,7 @@ const IS_HABITAT = typeof window !== "undefined" &&
   (window.location.hostname.replace(/^www\./, "") === "liveodi.com" || window.location.hostname === "localhost");
 
 // Lazy load
-const LiveODI = lazy(() => import("./components/LiveODI"));
+const LiveODI = lazy(() => import("./components/LiveODIBridgeSurface"));
 const AgentPage = lazy(() => import("./pages/AgentHabitat"));
 const OperatorGrant = lazy(() => import("./pages/OperatorGrant"));
 const Privacy = lazy(() => import("./pages/Privacy"));
