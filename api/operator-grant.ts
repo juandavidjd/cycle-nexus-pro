@@ -158,7 +158,7 @@ export default async function handler(req: any, res: any) {
 
   // Body gate after the human gate: an unauthenticated caller learns nothing about body validation.
   const body = readExactBody(req.body);
-  if (!body.ok) {
+  if (body.ok === false) {
     return res.status(400).json({ ok: false, error: body.error });
   }
 
