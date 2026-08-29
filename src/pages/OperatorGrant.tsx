@@ -5,7 +5,10 @@ const AUTH_STORAGE_KEY = "odi_session";
 const AUTH_VALIDATE_URL = "https://api.liveodi.com/auth/validate";
 const SW_IDENTITY = "ODI_OPERATOR_SW_SAFE_R1";
 const SW_TIMEOUT_MS = 5000;
-const MIN_START_BUDGET_SECONDS = 119;
+// PAIRING_FORWARDER_CONVERGENCE_R1: expires_at is a lower bound derived at the forwarder from the
+// issuer's expires_in_seconds (120 s); the start budget must absorb issuer latency and browser clock
+// skew, so 119 s (1 s margin) is unattainable. MUST equal api/operator-grant.ts MIN_START_BUDGET_SECONDS.
+const MIN_START_BUDGET_SECONDS = 90;
 const MIN_START_BUDGET_MS = MIN_START_BUDGET_SECONDS * 1000;
 
 type SwState =
