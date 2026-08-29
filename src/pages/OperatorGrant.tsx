@@ -1,5 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
+import {
+  INITIAL_BRIDGE_DEVICE_STATE,
+  grantRequestBody,
+  startBridgeDeviceSession,
+} from "../components/bridge/bridgeDeviceSession.js";
 
 const AUTH_STORAGE_KEY = "odi_session";
 const AUTH_VALIDATE_URL = "https://api.liveodi.com/auth/validate";
@@ -8,6 +13,9 @@ const SW_TIMEOUT_MS = 5000;
 // PAIRING_FORWARDER_CONVERGENCE_R1: expires_at is a lower bound derived at the forwarder from the
 // issuer's expires_in_seconds (120 s); the start budget must absorb issuer latency and browser clock
 // skew, so 119 s (1 s margin) is unattainable. MUST equal api/operator-grant.ts MIN_START_BUDGET_SECONDS.
+// PAIRING_FORWARDER_CONVERGENCE_R2: the intended device comes ONLY from the governed Bridge runtime state
+// (H3A contract + reducer, volatile). Standalone / WAITING / CONFLICT ⇒ no request can be built. The
+// human session stays the issuance authority; the device id is never rendered, stored or logged.
 const MIN_START_BUDGET_SECONDS = 90;
 const MIN_START_BUDGET_MS = MIN_START_BUDGET_SECONDS * 1000;
 
@@ -21,6 +29,14 @@ type SwState =
 
 type AuthState = "CHECKING" | "PASS" | "FAIL";
 type IssueState = "IDLE" | "REQUESTING" | "PASS" | "FAIL";
+
+// Same shape as the H3A consumer state (LiveODIBridgeSurface): produced only by the unchanged Bridge contract + reducer.
+type BridgeDeviceState = {
+  deviceId: string | null;
+  status: "WAITING" | "READY" | "CONFLICT";
+  acceptedCount: number;
+};
+type BridgeFrameState = "CHECKING" | "STANDALONE" | "EMBEDDED";
 
 type PresentedGrant = {
   grantId: string;
@@ -124,8 +140,24 @@ export default function OperatorGrant() {
   const [hasDispatched, setHasDispatched] = useState(false);
   const [presented, setPresented] = useState<PresentedGrant | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  // Governed device fact: volatile, produced only by the Bridge session; the ref is the single source read at click time.
+  const [bridge, setBridge] = useState<BridgeDeviceState>(INITIAL_BRIDGE_DEVICE_STATE as BridgeDeviceState);
+  const bridgeRef = useRef<BridgeDeviceState>(INITIAL_BRIDGE_DEVICE_STATE as BridgeDeviceState);
+  const [frame, setFrame] = useState<BridgeFrameState>("CHECKING");
 
   const clearPresented = useCallback(() => setPresented(null), []);
+
+  useEffect(() => {
+    // Listener-then-ping via the unchanged H3A contract; standalone pages get no device and can never issue.
+    const session = startBridgeDeviceSession(window, (next: BridgeDeviceState) => {
+      bridgeRef.current = next;
+      setBridge(next);
+    });
+    setFrame(session.standalone ? "STANDALONE" : "EMBEDDED");
+    return () => {
+      session.stop();
+    };
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -233,6 +265,15 @@ export default function OperatorGrant() {
       return;
     }
 
+    // Eligibility and request body come from the SAME accepted Bridge state object (READY + accepted device);
+    // WAITING / CONFLICT / standalone yield null and no request leaves this page.
+    const grantBody = grantRequestBody(bridgeRef.current);
+    if (!grantBody) {
+      setIssue("FAIL");
+      setIssueError("BRIDGE_DEVICE_NOT_READY");
+      return;
+    }
+
     setIssue("REQUESTING");
     setIssueError(null);
     clearPresented();
@@ -245,7 +286,7 @@ export default function OperatorGrant() {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: "{}",
+        body: JSON.stringify(grantBody),
         cache: "no-store",
         credentials: "omit",
         redirect: "error",
@@ -307,7 +348,9 @@ export default function OperatorGrant() {
     );
   }
 
-  const canIssue = sw === "PASS" && issue !== "REQUESTING" && !hasDispatched;
+  const deviceEligible = frame === "EMBEDDED" && bridge.status === "READY" && grantRequestBody(bridge) !== null;
+  const canIssue = sw === "PASS" && deviceEligible && issue !== "REQUESTING" && !hasDispatched;
+  const bridgeLabel = frame === "STANDALONE" ? "STANDALONE" : frame === "CHECKING" ? "CHECKING" : bridge.status;
 
   return (
     <main style={styles.shell}>
@@ -328,6 +371,10 @@ export default function OperatorGrant() {
             <strong>MIN START BUDGET</strong>
             <span style={styles.pass}>{MIN_START_BUDGET_SECONDS}s</span>
           </div>
+          <div style={styles.statusBox}>
+            <strong>BRIDGE DEVICE</strong>
+            <span style={deviceEligible ? styles.pass : styles.warn}>{bridgeLabel}</span>
+          </div>
         </div>
 
         <hr style={styles.hr} />
@@ -336,7 +383,9 @@ export default function OperatorGrant() {
         <p style={styles.muted}>
           Un clic humano despacha como máximo una solicitud desde esta carga de
           página. No hay reintento automático. Si el presupuesto de inicio es
-          insuficiente, el secreto no se presenta.
+          insuficiente, el secreto no se presenta. El dispositivo destinatario es
+          el que el Bridge acreditó en esta sesión (BRIDGE DEVICE = READY); fuera
+          del Bridge, o ante WAITING/CONFLICT, no se emite nada.
         </p>
 
         <div style={styles.actions}>

@@ -1,4 +1,4 @@
-// PAIRING_FORWARDER_CONVERGENCE_R1 · operator grant forwarder (Stage B, bound to the served issuer envelope)
+// PAIRING_FORWARDER_CONVERGENCE_R2 · operator grant forwarder (Stage B, bound to the served issuer envelope)
 //
 // Boundary: operator UI (same-origin POST /api/operator-grant, human Bearer) -> THIS forwarder -> issuer
 // (gateway POST /ecosistema/device-pairing/grant). The served issuer answers
@@ -7,8 +7,14 @@
 // expiry at the edge as a LOWER BOUND: startedAtMs (captured before the request left, hence before the
 // issuer's insert) + expires_in_seconds. The UI keeps parsing { ok, grant_id, pairing_secret, expires_at }.
 //
-// Invariants: POST only · habitat/preview hosts only · human Bearer forwarded verbatim · one upstream
-// request, never a retry · no logging · no-store · fail closed on any envelope the issuer did not promise.
+// R2: the intended device is no longer a compile-time constant. The operator page supplies it from the governed
+// Bridge runtime state (H3A: accepted bridge:ready / bridge:response, UUIDv4, volatile) as the ONLY variable field
+// of an exact request body { intended_device_id }. This forwarder validates its shape and transports it; the human
+// Bearer remains the sole issuance authority and the issuer remains the sole minting authority. A device id is
+// never an authenticator here.
+//
+// Invariants: POST only · habitat/preview hosts only · human Bearer forwarded verbatim · exact body (one key) ·
+// one upstream request, never a retry · no logging · no-store · fail closed on any envelope the issuer did not promise.
 
 const UPSTREAM_GRANT_URL =
   "https://api.liveodi.com/ecosistema/device-pairing/grant";
@@ -20,17 +26,27 @@ const MAX_EXPIRES_IN_SECONDS = 3_600;
 const HABITAT_HOST = "liveodi.com";
 const PREVIEW_HOST_SUFFIX = ".vercel.app";
 
-const GRANT_BODY = {
+// Governed, fixed fields of the issuer request. The client cannot steer them.
+const GRANT_BODY_FIXED = {
   audience_id: null,
   credential_type: "OPAQUE_BEARER_V1",
-  intended_device_id: "a44113c9-bdb2-457c-a92e-86f18c81ac2e",
 } as const;
+
+// Same shape rule as isValidBridgeDeviceId in src/components/bridge/bridgeDeviceContract.js (UUID v4, variant 8/9/a/b).
+// Duplicated because this serverless function stays self-contained; the static test asserts the two sources are equal.
+const INTENDED_DEVICE_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const INTENDED_DEVICE_ID_LENGTH = 36;
 
 type IssuerEnvelope = {
   grant_id: string;
   pairing_secret: string;
   expires_in_seconds: number;
 };
+
+type ExactBodyResult =
+  | { ok: true; intended_device_id: string }
+  | { ok: false; error: "INTENDED_DEVICE_ID_REQUIRED" | "BODY_NOT_EXACT" | "INVALID_INTENDED_DEVICE_ID" };
 
 function setNoStoreHeaders(res: any) {
   res.setHeader("Cache-Control", "no-store, private, max-age=0");
@@ -50,6 +66,38 @@ function requestHost(req: any): string | null {
 
 function isHabitatOrPreviewHost(host: string): boolean {
   return host.replace(/^www\./, "") === HABITAT_HOST || host.endsWith(PREVIEW_HOST_SUFFIX);
+}
+
+// Exact body: a JSON object whose ONLY key is intended_device_id, a strict UUIDv4 string. Anything else is rejected
+// before any upstream request (missing / empty / extra keys / wrong type / wrong shape / non-object / arrays).
+function readExactBody(raw: unknown): ExactBodyResult {
+  let value: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return { ok: false, error: "INTENDED_DEVICE_ID_REQUIRED" };
+    }
+  }
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return { ok: false, error: "INTENDED_DEVICE_ID_REQUIRED" };
+  }
+  const keys = Object.keys(value as Record<string, unknown>);
+  if (!keys.includes("intended_device_id")) {
+    return { ok: false, error: "INTENDED_DEVICE_ID_REQUIRED" };
+  }
+  if (keys.length !== 1) {
+    return { ok: false, error: "BODY_NOT_EXACT" };
+  }
+  const id = (value as Record<string, unknown>).intended_device_id;
+  if (
+    typeof id !== "string" ||
+    id.length !== INTENDED_DEVICE_ID_LENGTH ||
+    !INTENDED_DEVICE_ID_RE.test(id)
+  ) {
+    return { ok: false, error: "INVALID_INTENDED_DEVICE_ID" };
+  }
+  return { ok: true, intended_device_id: id };
 }
 
 function parseIssuerEnvelope(input: unknown): IssuerEnvelope | null {
@@ -108,6 +156,12 @@ export default async function handler(req: any, res: any) {
     return res.status(401).json({ ok: false, error: "HUMAN_BEARER_REQUIRED" });
   }
 
+  // Body gate after the human gate: an unauthenticated caller learns nothing about body validation.
+  const body = readExactBody(req.body);
+  if (!body.ok) {
+    return res.status(400).json({ ok: false, error: body.error });
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
   // Conservative anchor: taken BEFORE the request leaves, so it precedes the issuer's insert and the
@@ -122,7 +176,7 @@ export default async function handler(req: any, res: any) {
         Authorization: authorization,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(GRANT_BODY),
+      body: JSON.stringify({ ...GRANT_BODY_FIXED, intended_device_id: body.intended_device_id }),
       cache: "no-store",
       redirect: "error",
       signal: controller.signal,
