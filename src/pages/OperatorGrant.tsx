@@ -1,12 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 
 const AUTH_STORAGE_KEY = "odi_session";
 const AUTH_VALIDATE_URL = "https://api.liveodi.com/auth/validate";
 const SW_IDENTITY = "ODI_OPERATOR_SW_SAFE_R1";
 const SW_TIMEOUT_MS = 5000;
-const MIN_START_BUDGET_SECONDS = 119;
-const MIN_START_BUDGET_MS = MIN_START_BUDGET_SECONDS * 1000;
+const FROZEN_TTL_SECONDS = 120;
 
 type SwState =
   | "CHECKING"
@@ -22,13 +21,14 @@ type IssueState = "IDLE" | "REQUESTING" | "PASS" | "FAIL";
 type PresentedGrant = {
   grantId: string;
   value: string;
-  expiresAtMs: number;
+  expiresAt: string;
+  retentionSeconds: number;
   provenance: "LIVE_OPERATOR_GRANT";
 };
 
 function parseGrantEnvelope(
   input: unknown,
-): { grantId: string; value: string; expiresAtMs: number } | null {
+): { grantId: string; value: string; expiresAt: string; retentionSeconds: number } | null {
   if (!input || typeof input !== "object") return null;
   const x = input as Record<string, unknown>;
   if (x.ok !== true) return null;
@@ -39,10 +39,23 @@ function parseGrantEnvelope(
   ) {
     return null;
   }
-  if (typeof x.expires_at !== "string") return null;
-  const expiresAtMs = Date.parse(x.expires_at);
-  if (!Number.isFinite(expiresAtMs)) return null;
-  return { grantId: x.grant_id, value: x.pairing_secret, expiresAtMs };
+  if (x.credential_type !== "OPAQUE_BEARER_V1") return null;
+  if (typeof x.expires_at !== "string" || !Number.isFinite(Date.parse(x.expires_at))) {
+    return null;
+  }
+
+  const ttl = x.expires_in_seconds;
+  const retentionSeconds =
+    typeof ttl === "number" && Number.isInteger(ttl) && ttl > 0
+      ? Math.min(ttl, FROZEN_TTL_SECONDS)
+      : FROZEN_TTL_SECONDS;
+
+  return {
+    grantId: x.grant_id,
+    value: x.pairing_secret,
+    expiresAt: x.expires_at,
+    retentionSeconds,
+  };
 }
 
 function waitForControllerChange(timeoutMs: number): Promise<boolean> {
@@ -120,7 +133,6 @@ export default function OperatorGrant() {
   const [issueError, setIssueError] = useState<string | null>(null);
   const [hasDispatched, setHasDispatched] = useState(false);
   const [presented, setPresented] = useState<PresentedGrant | null>(null);
-  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const clearPresented = useCallback(() => setPresented(null), []);
 
@@ -162,22 +174,18 @@ export default function OperatorGrant() {
     if (auth !== "PASS") return;
 
     let cancelled = false;
-
     (async () => {
       if (!("serviceWorker" in navigator)) {
         if (!cancelled) setSw("FAIL_NO_CONTROLLER");
         return;
       }
-
       try {
         const registration = await navigator.serviceWorker.getRegistration("/");
         if (!registration) {
           if (!cancelled) setSw("FAIL_NO_CONTROLLER");
           return;
         }
-
         await registration.update();
-
         if (!navigator.serviceWorker.controller) {
           if (!cancelled) setSw("WAITING_CONTROLLERCHANGE");
           const changed = await waitForControllerChange(SW_TIMEOUT_MS);
@@ -186,33 +194,24 @@ export default function OperatorGrant() {
             return;
           }
         }
-
         const result = await handshakeController(SW_TIMEOUT_MS);
         if (!cancelled) setSw(result);
       } catch {
         if (!cancelled) setSw("FAIL_TIMEOUT");
       }
     })();
-
     return () => {
       cancelled = true;
     };
   }, [auth]);
 
+  // Memory-hygiene timer only. It never decides grant validity and never blocks
+  // initial presentation. The server remains the sole expiry authority.
   useEffect(() => {
     if (!presented) return;
-    const interval = window.setInterval(() => setNowMs(Date.now()), 250);
-    return () => window.clearInterval(interval);
-  }, [presented]);
-
-  const secondsLeft = useMemo(() => {
-    if (!presented) return 0;
-    return Math.max(0, Math.ceil((presented.expiresAtMs - nowMs) / 1000));
-  }, [presented, nowMs]);
-
-  useEffect(() => {
-    if (presented && secondsLeft <= 0) clearPresented();
-  }, [presented, secondsLeft, clearPresented]);
+    const timer = window.setTimeout(clearPresented, presented.retentionSeconds * 1000);
+    return () => window.clearTimeout(timer);
+  }, [presented, clearPresented]);
 
   const issueLiveGrant = async () => {
     if (
@@ -250,7 +249,6 @@ export default function OperatorGrant() {
       });
 
       const payload: unknown = await response.json().catch(() => null);
-
       if (!response.ok) {
         setIssue("FAIL");
         setIssueError(readErrorCode(payload) ?? `HTTP_${response.status}`);
@@ -259,36 +257,31 @@ export default function OperatorGrant() {
 
       const parsed = parseGrantEnvelope(payload);
       if (!parsed) {
+        // A mint may already have committed. Never reopen the button on this page.
         setIssue("FAIL");
-        setIssueError("INVALID_GRANT_ENVELOPE");
+        setIssueError("INVALID_GRANT_ENVELOPE_MINT_STATE_UNKNOWN");
         return;
       }
 
-      const remainingMs = parsed.expiresAtMs - Date.now();
-      if (remainingMs < MIN_START_BUDGET_MS) {
-        setIssue("FAIL");
-        setIssueError("INSUFFICIENT_CLIENT_START_BUDGET");
-        return;
-      }
-
-      setNowMs(Date.now());
       setPresented({
         grantId: parsed.grantId,
         value: parsed.value,
-        expiresAtMs: parsed.expiresAtMs,
+        expiresAt: parsed.expiresAt,
+        retentionSeconds: parsed.retentionSeconds,
         provenance: "LIVE_OPERATOR_GRANT",
       });
       setIssue("PASS");
     } catch {
+      // The facade may have attempted the upstream mint. Never retry automatically.
       setIssue("FAIL");
-      setIssueError("ISSUANCE_REQUEST_FAILED");
+      setIssueError("ISSUANCE_REQUEST_STATE_UNKNOWN");
     }
   };
 
   if (auth === "CHECKING") {
     return (
       <main style={styles.shell}>
-        <section style={styles.card}>Validando sesión…</section>
+        <section style={styles.card}>Validando sesión...</section>
       </main>
     );
   }
@@ -309,31 +302,31 @@ export default function OperatorGrant() {
   return (
     <main style={styles.shell}>
       <section style={styles.card}>
-        <div style={styles.banner}>CALIBRATED LIVE · EMISIÓN REAL ONE-SHOT</div>
-        <h1 style={styles.title}>Operador de vinculación 0.1.3</h1>
+        <div style={styles.banner}>HUMAN-GATED · ONE-SHOT</div>
+        <h1 style={styles.title}>Operador de vinculacion</h1>
         <p style={styles.muted}>
-          Stage B · CALIBRATED_LIVE. La emisión requiere AUTH y SW en PASS y
-          aplica un presupuesto mínimo de inicio de {MIN_START_BUDGET_SECONDS}s.
+          Primero inicia Vincular en el Bridge y confirma visualmente que el CredUI
+          nativo ya esta abierto y esperando entrada. Solo despues vuelve aqui y emite
+          la concesion. El navegador no decide device, audience, execution key ni expiry.
         </p>
 
         <div style={styles.grid}>
           <div style={styles.statusBox}>
-            <strong>SW CONTROLLER</strong>
+            <strong>SW INTEGRITY GATE</strong>
             <span style={sw === "PASS" ? styles.pass : styles.warn}>{sw}</span>
           </div>
           <div style={styles.statusBox}>
-            <strong>MIN START BUDGET</strong>
-            <span style={styles.pass}>{MIN_START_BUDGET_SECONDS}s</span>
+            <strong>READINESS AUTHORITY</strong>
+            <span style={styles.pass}>HUMAN VISUAL CONFIRMATION</span>
           </div>
         </div>
 
         <hr style={styles.hr} />
 
-        <h2 style={styles.h2}>Concesión real</h2>
+        <h2 style={styles.h2}>Concesion real</h2>
         <p style={styles.muted}>
-          Un clic humano despacha como máximo una solicitud desde esta carga de
-          página. No hay reintento automático. Si el presupuesto de inicio es
-          insuficiente, el secreto no se presenta.
+          Este boton despacha como maximo una solicitud desde esta carga de pagina.
+          No existe reintento automatico ni rechazo post-mint por reloj local.
         </p>
 
         <div style={styles.actions}>
@@ -343,7 +336,7 @@ export default function OperatorGrant() {
             disabled={!canIssue}
             style={{ ...styles.button, ...(!canIssue ? styles.buttonDisabled : {}) }}
           >
-            {issue === "REQUESTING" ? "Emitiendo…" : "Emitir concesión real"}
+            {issue === "REQUESTING" ? "Emitiendo..." : "Ya veo CredUI - Emitir concesion"}
           </button>
           <button
             type="button"
@@ -360,9 +353,9 @@ export default function OperatorGrant() {
 
         {issue === "FAIL" && issueError && (
           <div style={styles.errorBox}>
-            <strong>EMISIÓN NO UTILIZABLE</strong>
+            <strong>EMISION NO UTILIZABLE</strong>
             <span style={styles.danger}>{issueError}</span>
-            <div style={styles.small}>NO RETRY AUTOMÁTICO · NO SEGUNDO CLICK</div>
+            <div style={styles.small}>NO RETRY AUTOMATICO · NO SEGUNDO CLICK</div>
           </div>
         )}
 
@@ -371,17 +364,18 @@ export default function OperatorGrant() {
             <div style={styles.small}>PROVENANCE · {presented.provenance}</div>
             <div style={styles.small}>GRANT ID · {presented.grantId}</div>
             <div style={styles.secret}>{presented.value}</div>
-            <div style={styles.small}>Ventana restante: {secondsLeft}s</div>
+            <div style={styles.small}>EXPIRA SEGUN POSTGRESQL · {presented.expiresAt}</div>
             <p style={styles.muted}>
-              Transcribe manualmente este valor al CredUI nativo. Permanece sólo
-              en memoria React y se elimina al expirar o al pulsar Limpiar.
+              Presentacion inmediata. Transcribe manualmente grant ID y secreto al CredUI
+              nativo ya abierto. La limpieza local es solo higiene de memoria y no decide
+              la validez del grant.
             </p>
           </div>
         )}
 
         <div style={styles.lockBox}>
           <strong>LIVE ISSUANCE</strong>
-          <span style={styles.pass}>CALIBRATED · ONE-SHOT PER PAGE LOAD</span>
+          <span style={styles.pass}>HUMAN CLICK · ONE-SHOT PER PAGE LOAD</span>
         </div>
       </section>
     </main>
